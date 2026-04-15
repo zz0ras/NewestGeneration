@@ -6,10 +6,16 @@ import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dn
 import { CSS } from "@dnd-kit/utilities";
 import { Copy, Plus, Trash } from "lucide-react";
 
-function SortablePageItem({ page, index }: { page: any, index: number }) {
+function SortablePageItem({ page, index, total }: { page: any, index: number, total?: number }) {
   const { selectedPageId, selectPage, duplicatePage, deletePage, document: doc } = useEditorStore();
   const isSelected = selectedPageId === page.id;
   const isLeft = index % 2 === 0;
+
+  let label = `${index + 1}`;
+  if (total) {
+    if (index === 0) label = "Bìa trước";
+    else if (index === total - 1 && total % 2 === 0) label = "Bìa sau";
+  }
 
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: page.id });
   const style = {
@@ -79,7 +85,7 @@ function SortablePageItem({ page, index }: { page: any, index: number }) {
 
       {/* Page number */}
       <div className="text-center mt-1.5 text-[10px] font-medium" style={{ color: '#a0845e' }}>
-        {index + 1}
+        {label}
       </div>
     </div>
   );
@@ -121,7 +127,7 @@ export function Filmstrip() {
         <SortableContext items={document.pages.map(p => p.id)} strategy={horizontalListSortingStrategy}>
           <div className="flex gap-2 pb-3 pt-2 items-end">
             {document.pages.map((page, i) => (
-              <SortablePageItem key={page.id} page={page} index={i} />
+              <SortablePageItem key={page.id} page={page} index={i} total={document.pages.length} />
             ))}
           </div>
         </SortableContext>

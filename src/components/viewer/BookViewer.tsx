@@ -24,12 +24,19 @@ interface FlipBookHandle {
 /* ------------------------------------------------------------------ */
 /*  Spread helpers                                                     */
 /* ------------------------------------------------------------------ */
-function getSpreadLayout(pageCount: number, portrait: boolean): number[][] {
+function getSpreadLayout(pageCount: number, portrait: boolean, showCover: boolean = true): number[][] {
   if (pageCount <= 0) return [];
   if (portrait) return Array.from({ length: pageCount }, (_, i) => [i]);
 
   const spreads: number[][] = [];
-  for (let i = 0; i < pageCount; i += 2) {
+  let start = 0;
+
+  if (showCover) {
+    spreads.push([0]);
+    start = 1;
+  }
+
+  for (let i = start; i < pageCount; i += 2) {
     if (i < pageCount - 1) {
       spreads.push([i, i + 1]);
     } else {
@@ -49,10 +56,10 @@ function getSpreadIndexByPage(pageIndex: number, spreads: number[][]): number {
 /* ------------------------------------------------------------------ */
 const ViewerPage = forwardRef<
   HTMLDivElement,
-  { page: any; pageW: number; pageH: number; renderW: number; renderH: number; fitScale: number; number: number }
->(function ViewerPage({ page, pageW, pageH, renderW, renderH, fitScale, number }, ref) {
+  { page: any; pageW: number; pageH: number; renderW: number; renderH: number; fitScale: number; number: number; isHard: boolean }
+>(function ViewerPage({ page, pageW, pageH, renderW, renderH, fitScale, number, isHard }, ref) {
   return (
-    <div ref={ref} className="flip-page" style={{ width: renderW, height: renderH }}>
+    <div ref={ref} className="flip-page" style={{ width: renderW, height: renderH }} data-density={isHard ? "hard" : "soft"}>
       <div className="flip-page__viewport" style={{ width: renderW, height: renderH }}>
         <div
           className="flip-page__surface"
@@ -236,6 +243,16 @@ export function BookViewer({ document }: { document: BookDocument }) {
     api.turnToNextPage?.();
   };
 
+  const isFrontCover = currentPage === 0;
+  const isBackCover = currentPage === document.pages.length - 1 && document.pages.length % 2 === 0 && currentPage !== 0;
+
+  let translateX = 0;
+  if (isFrontCover) {
+    translateX = -(renderW / 2);
+  } else if (isBackCover) {
+    translateX = renderW / 2;
+  }
+
   return (
     <section className="viewer-section">
       <div className="viewer-shell">
@@ -251,7 +268,11 @@ export function BookViewer({ document }: { document: BookDocument }) {
         </button>
 
         {/* Flipbook stage */}
-        <div className="viewer-stage" ref={stageRef}>
+        <div 
+          className="viewer-stage" 
+          ref={stageRef}
+          style={{ transform: `translateX(${translateX}px)`, transition: 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)' }}
+        >
           {hasStage ? (
             // @ts-ignore react-pageflip types
             <HTMLFlipBook
@@ -263,7 +284,7 @@ export function BookViewer({ document }: { document: BookDocument }) {
               maxWidth={renderW}
               minHeight={renderH}
               maxHeight={renderH}
-              showCover={false}
+              showCover={true}
               maxShadowOpacity={0.35}
               mobileScrollSupport
               drawShadow
@@ -289,18 +310,22 @@ export function BookViewer({ document }: { document: BookDocument }) {
               }}
               className="flipbook-viewer"
             >
-              {document.pages.map((page, i) => (
-                <ViewerPage
-                  key={page.id}
-                  page={page}
-                  pageW={document.pageSize.width}
-                  pageH={document.pageSize.height}
-                  renderW={renderW}
-                  renderH={renderH}
-                  fitScale={safeScale}
-                  number={i + 1}
-                />
-              ))}
+              {document.pages.map((page, i) => {
+                const isHard = i === 0 || i === document.pages.length - 1;
+                return (
+                  <ViewerPage
+                    key={page.id}
+                    page={page}
+                    pageW={document.pageSize.width}
+                    pageH={document.pageSize.height}
+                    renderW={renderW}
+                    renderH={renderH}
+                    fitScale={safeScale}
+                    number={i + 1}
+                    isHard={isHard}
+                  />
+                )
+              })}
             </HTMLFlipBook>
           ) : null}
         </div>

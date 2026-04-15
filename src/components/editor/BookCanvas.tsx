@@ -70,12 +70,16 @@ function ObjectNode({ shapeProps, isSelected, onSelect, onChange }: any) {
   );
 }
 
-// A single page rendered in the Konva Stage
 function SinglePageCanvas({
   page, pageIndex, docW, docH, scale, isActive,
-  selectedObjectId, onSelectObject, onUpdateObject, onSelectPage
+  selectedObjectId, onSelectObject, onUpdateObject, onSelectPage, isCover
 }: any) {
-  const isLeft = pageIndex % 2 === 0;
+  // If it's a cover, we force the visuals to match a closed book layout:
+  // Front cover (0) is a "right" page. Back cover is a "left" page.
+  let isLeft = pageIndex % 2 === 0;
+  if (isCover) {
+    isLeft = pageIndex !== 0; // Front cover is treated as right, Back cover as left
+  }
 
   return (
     <div
@@ -87,7 +91,7 @@ function SinglePageCanvas({
         boxShadow: isActive
           ? '0 0 0 2px #1a1410, 0 0 0 4px #c4a882'
           : 'none',
-        borderRadius: isLeft ? '3px 0 0 3px' : '0 3px 3px 0',
+        borderRadius: isCover ? '4px' : (isLeft ? '4px 0 0 4px' : '0 4px 4px 0'),
       }}
     >
       <Stage
@@ -109,7 +113,7 @@ function SinglePageCanvas({
         <Layer>
           {/* Page background — always visible cream fill */}
           <Rect x={0} y={0} width={docW} height={docH} fill="#fbf8f3" listening={false} />
-          {/* Subtle inner edge shadow for left page */}
+          {/* Subtle inner edge shadow for left page/back cover */}
           {isLeft && (
             <Rect x={docW - 20} y={0} width={20} height={docH}
               fillLinearGradientStartPoint={{ x: 0, y: 0 }}
@@ -117,7 +121,7 @@ function SinglePageCanvas({
               fillLinearGradientColorStops={[0, 'rgba(92,74,54,0)', 1, 'rgba(92,74,54,0.06)']}
               listening={false} />
           )}
-          {/* Subtle inner edge shadow for right page */}
+          {/* Subtle inner edge shadow for right page/front cover */}
           {!isLeft && (
             <Rect x={0} y={0} width={20} height={docH}
               fillLinearGradientStartPoint={{ x: 0, y: 0 }}
@@ -201,11 +205,30 @@ export function BookCanvas() {
     );
   }
 
-  // Find the current spread: page pairs (0,1), (2,3), etc.
+  // Determine spread components
   const selectedPageIndex = document.pages.findIndex(p => p.id === selectedPageId);
-  const spreadStartIndex = selectedPageIndex >= 0 ? (selectedPageIndex % 2 === 0 ? selectedPageIndex : selectedPageIndex - 1) : 0;
-  const leftPage = document.pages[spreadStartIndex] ?? null;
-  const rightPage = document.pages[spreadStartIndex + 1] ?? null;
+  const isFrontCover = selectedPageIndex === 0;
+  const isBackCover = selectedPageIndex === document.pages.length - 1 && document.pages.length % 2 === 0 && selectedPageIndex !== 0;
+
+  let leftPage = null;
+  let rightPage = null;
+  let spreadLabel = "";
+  let spreadStartIndex = 0;
+
+  if (isFrontCover) {
+    rightPage = document.pages[0]; // Front cover shows visually as a right-side page
+    spreadLabel = "Bìa trước";
+  } else if (isBackCover) {
+    leftPage = document.pages[selectedPageIndex]; // Back cover visually as a left-side page 
+    spreadStartIndex = selectedPageIndex;
+    spreadLabel = "Bìa sau";
+  } else {
+    spreadStartIndex = selectedPageIndex % 2 !== 0 ? selectedPageIndex : selectedPageIndex - 1;
+    if (spreadStartIndex < 1) spreadStartIndex = 1;
+    leftPage = document.pages[spreadStartIndex] ?? null;
+    rightPage = document.pages[spreadStartIndex + 1] ?? null;
+    spreadLabel = `Trang ${spreadStartIndex + 1}–${Math.min(spreadStartIndex + 2, document.pages.length)} / ${document.pages.length}`;
+  }
 
   return (
     <div ref={containerRef} className="w-full h-full flex items-center justify-center relative overflow-hidden">
@@ -216,73 +239,82 @@ export function BookCanvas() {
 
       {/* Book spread container */}
       <div className="relative flex" style={{ filter: 'drop-shadow(0 20px 40px rgba(92, 74, 54, 0.25))' }}>
-        {/* Left page */}
-        {leftPage ? (
-          <SinglePageCanvas
-            page={leftPage}
-            pageIndex={spreadStartIndex}
-            docW={docW}
-            docH={docH}
-            scale={scale}
-            isActive={selectedPageId === leftPage.id}
-            selectedObjectId={selectedObjectId}
-            onSelectObject={selectObject}
-            onUpdateObject={updateObject}
-            onSelectPage={selectPage}
-          />
-        ) : (
-          <div
-            className="book-page book-page--left paper-texture flex items-center justify-center"
-            style={{
-              width: docW * scale,
-              height: docH * scale,
-              borderRadius: '3px 0 0 3px',
-            }}
-          >
-            <span className="text-espresso/30 text-sm italic">Trang trống</span>
-          </div>
+        
+        {/* Left page area */}
+        {!isFrontCover && (
+          leftPage ? (
+            <SinglePageCanvas
+              page={leftPage}
+              pageIndex={spreadStartIndex}
+              docW={docW}
+              docH={docH}
+              scale={scale}
+              isActive={selectedPageId === leftPage.id}
+              selectedObjectId={selectedObjectId}
+              onSelectObject={selectObject}
+              onUpdateObject={updateObject}
+              onSelectPage={selectPage}
+              isCover={isBackCover}
+            />
+          ) : (
+            <div
+              className="book-page book-page--left paper-texture flex items-center justify-center"
+              style={{
+                width: docW * scale,
+                height: docH * scale,
+                borderRadius: '4px 0 0 4px',
+              }}
+            >
+              <span className="text-espresso/30 text-sm italic">Trang trống</span>
+            </div>
+          )
         )}
 
-        {/* Spine divider */}
-        <div className="book-spine-shadow" style={{
-          position: 'relative',
-          width: '4px',
-          left: 'auto',
-          transform: 'none',
-          background: 'linear-gradient(to right, rgba(92,74,54,0.12), rgba(92,74,54,0.25) 50%, rgba(92,74,54,0.12))',
-        }} />
+        {/* Spine divider (hidden for covers) */}
+        {!isFrontCover && !isBackCover && (
+          <div className="book-spine-shadow" style={{
+            position: 'relative',
+            width: '4px',
+            left: 'auto',
+            transform: 'none',
+            background: 'linear-gradient(to right, rgba(92,74,54,0.12), rgba(92,74,54,0.25) 50%, rgba(92,74,54,0.12))',
+          }} />
+        )}
 
-        {/* Right page */}
-        {rightPage ? (
-          <SinglePageCanvas
-            page={rightPage}
-            pageIndex={spreadStartIndex + 1}
-            docW={docW}
-            docH={docH}
-            scale={scale}
-            isActive={selectedPageId === rightPage.id}
-            selectedObjectId={selectedObjectId}
-            onSelectObject={selectObject}
-            onUpdateObject={updateObject}
-            onSelectPage={selectPage}
-          />
-        ) : (
-          <div
-            className="book-page book-page--right paper-texture flex items-center justify-center"
-            style={{
-              width: docW * scale,
-              height: docH * scale,
-              borderRadius: '0 3px 3px 0',
-            }}
-          >
-            <span className="text-espresso/30 text-sm italic">Trang trống</span>
-          </div>
+        {/* Right page area */}
+        {!isBackCover && (
+          rightPage ? (
+            <SinglePageCanvas
+              page={rightPage}
+              pageIndex={isFrontCover ? 0 : spreadStartIndex + 1}
+              docW={docW}
+              docH={docH}
+              scale={scale}
+              isActive={selectedPageId === rightPage.id}
+              selectedObjectId={selectedObjectId}
+              onSelectObject={selectObject}
+              onUpdateObject={updateObject}
+              onSelectPage={selectPage}
+              isCover={isFrontCover}
+            />
+          ) : (
+            <div
+              className="book-page book-page--right paper-texture flex items-center justify-center"
+              style={{
+                width: docW * scale,
+                height: docH * scale,
+                borderRadius: '0 4px 4px 0',
+              }}
+            >
+              <span className="text-espresso/30 text-sm italic">Trang trống</span>
+            </div>
+          )
         )}
       </div>
 
       {/* Spread indicator */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs font-medium px-4 py-1.5 rounded-full glass-card" style={{ color: '#c4a882' }}>
-        Trang {spreadStartIndex + 1}–{Math.min(spreadStartIndex + 2, document.pages.length)} / {document.pages.length}
+        {spreadLabel}
       </div>
     </div>
   );
