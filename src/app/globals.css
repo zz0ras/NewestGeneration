@@ -1,0 +1,174 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  
+  /* Pastel Brown + White palette */
+  --color-canvas-bg: #1a1410;
+  --color-shell-bg: #1e1914;
+  --color-glass: rgba(180, 150, 120, 0.06);
+  --color-glass-border: rgba(210, 180, 150, 0.12);
+  --color-glass-hover: rgba(210, 180, 150, 0.15);
+  --color-accent: #c4a882;
+  --color-accent-hover: #d4bc9a;
+  --color-accent-deep: #a0845e;
+  --color-warm-white: #faf5ef;
+  --color-cream: #f5ede1;
+  --color-latte: #e8ddd0;
+  --color-mocha: #8b7355;
+  --color-espresso: #5c4a36;
+  --color-book-page: #fbf8f3;
+  --color-book-spine: #c4a882;
+  
+  --shadow-glass: 0 8px 32px 0 rgba(40, 30, 20, 0.45);
+  --shadow-float: 0 10px 25px -5px rgba(40, 30, 20, 0.5), 0 8px 10px -6px rgba(40, 30, 20, 0.3);
+  --shadow-book: 0 25px 50px -12px rgba(92, 74, 54, 0.35), 0 0 0 1px rgba(196, 168, 130, 0.1);
+  --shadow-book-inner: inset 4px 0 15px rgba(92, 74, 54, 0.15);
+}
+
+@layer base {
+  :root {
+    --background: #1a1410;
+    --foreground: #f5ede1;
+  }
+  
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    @apply antialiased font-sans m-0 overflow-hidden;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    background: rgba(30, 25, 20, 0.75);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(196, 168, 130, 0.12);
+    box-shadow: var(--shadow-glass);
+  }
+  
+  .glass-card {
+    background: rgba(40, 32, 24, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(196, 168, 130, 0.1);
+  }
+  
+  .glass-button {
+    background: rgba(196, 168, 130, 0.08);
+    border: 1px solid rgba(196, 168, 130, 0.14);
+    transition: all 0.25s cubic-bezier(0.2, 0, 0, 1);
+    color: var(--color-cream);
+  }
+  
+  .glass-button:hover {
+    background: rgba(196, 168, 130, 0.2);
+    border-color: rgba(196, 168, 130, 0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(196, 168, 130, 0.12);
+  }
+
+  .glass-button:active {
+    transform: translateY(0.5px);
+  }
+
+  .interactive-bounce {
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  
+  .interactive-bounce:hover {
+    transform: scale(1.06);
+  }
+  
+  .interactive-bounce:active {
+    transform: scale(0.94);
+  }
+
+  /* Book page styling */
+  .book-page {
+    background: var(--color-book-page);
+    position: relative;
+  }
+
+  .book-page::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 30px;
+    pointer-events: none;
+  }
+
+  .book-page--left::after {
+    right: 0;
+    background: linear-gradient(to left, rgba(92, 74, 54, 0.06), transparent);
+  }
+
+  .book-page--right::after {
+    left: 0;
+    background: linear-gradient(to right, rgba(92, 74, 54, 0.08), transparent);
+  }
+
+  /* Book spine center shadow */
+  .book-spine-shadow {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(to right, 
+      rgba(92, 74, 54, 0.08), 
+      rgba(92, 74, 54, 0.18) 40%,
+      rgba(92, 74, 54, 0.22) 50%,
+      rgba(92, 74, 54, 0.18) 60%,
+      rgba(92, 74, 54, 0.08)
+    );
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* Decorative paper texture overlay */
+  .paper-texture {
+    position: relative;
+  }
+  .paper-texture::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23000' fill-opacity='0.02'%3E%3Cpath d='M0 0h20v20H0zM20 20h20v20H20z'/%3E%3C/g%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(30, 25, 20, 0.3);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(196, 168, 130, 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(196, 168, 130, 0.35);
+}
+
+/* Focus ring */
+:focus-visible {
+  outline: 2px solid rgba(196, 168, 130, 0.5);
+  outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+  background: rgba(196, 168, 130, 0.3);
+}
