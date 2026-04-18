@@ -1,6 +1,9 @@
 export type ObjectTemplateType = "text" | "image" | "shape" | "video";
+export type TextAlign = "left" | "center" | "right";
+export type MediaFit = "cover" | "contain";
+export type FontSourceType = "preset" | "upload";
 
-export interface PageObject {
+interface BasePageObject {
   id: string;
   type: ObjectTemplateType;
   x: number;
@@ -9,9 +12,43 @@ export interface PageObject {
   height: number;
   rotation: number;
   zIndex: number;
-  // Dynamic payload based on type
-  [key: string]: any;
 }
+
+export interface TextObject extends BasePageObject {
+  type: "text";
+  text: string;
+  fontSize: number;
+  fontFamily: string;
+  fill: string;
+  fontWeight: "normal" | "bold";
+  fontStyle: "normal" | "italic";
+  align: TextAlign;
+  lineHeight: number;
+}
+
+export interface ShapeObject extends BasePageObject {
+  type: "shape";
+  shapeType: "rect";
+  fill: string;
+  cornerRadius?: number;
+}
+
+interface BaseMediaObject extends BasePageObject {
+  src: string;
+  fit: MediaFit;
+  name?: string;
+  thumbnailSrc?: string;
+}
+
+export interface ImageObject extends BaseMediaObject {
+  type: "image";
+}
+
+export interface VideoObject extends BaseMediaObject {
+  type: "video";
+}
+
+export type PageObject = TextObject | ShapeObject | ImageObject | VideoObject;
 
 export interface BookPage {
   id: string;
@@ -19,7 +56,31 @@ export interface BookPage {
   side?: "left" | "right";
   objects: PageObject[];
   thumbnail?: string;
-  themeId?: string; // New feature: Theme tracking
+  themeId?: string;
+}
+
+export interface MediaFolderSource {
+  id: string;
+  name: string;
+  shareUrl: string;
+  folderId: string;
+}
+
+export interface MediaAsset {
+  id: string;
+  type: "image" | "video";
+  name: string;
+  src: string;
+  thumbnailSrc?: string;
+}
+
+export interface DocumentFontAsset {
+  id: string;
+  family: string;
+  sourceType: FontSourceType;
+  mimeType: string;
+  data: string;
+  originalFileName: string;
 }
 
 export interface BookDocument {
@@ -32,6 +93,9 @@ export interface BookDocument {
   };
   pages: BookPage[];
   updatedAt: string;
+  mediaFolders: MediaFolderSource[];
+  activeMediaFolderId: string | null;
+  fontAssets: DocumentFontAsset[];
 }
 
 export type BookViewMode = "design" | "preview";

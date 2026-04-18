@@ -2,6 +2,12 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+Create `.env.local` from `.env.example` and set the media API endpoint before using the editor media library:
+
+```bash
+NEXT_PUBLIC_MEDIA_LIBRARY_ENDPOINT=https://your-media-api.example.com/assets
+```
+
 First, run the development server:
 
 ```bash

@@ -1,25 +1,30 @@
 import { nanoid } from "nanoid";
-import { BookPage, PageObject } from "./types";
+import type { BookPage, ImageObject, MediaFolderSource, PageObject, ShapeObject, TextObject, VideoObject } from "./types";
+import { DEFAULT_FONT_FAMILY } from "@/lib/fonts/presets";
 
-export function createTextObject(overrides?: Partial<PageObject>): PageObject {
+export function createTextObject(overrides?: Partial<TextObject>): TextObject {
   return {
     id: nanoid(),
     type: "text",
     x: 50,
     y: 50,
-    width: 200,
-    height: 50,
+    width: 220,
+    height: 60,
     rotation: 0,
     zIndex: 1,
-    text: "Add some text here...",
+    text: "Thêm nội dung tại đây...",
     fontSize: 24,
-    fontFamily: "Inter",
-    fill: "#ffffff",
+    fontFamily: DEFAULT_FONT_FAMILY,
+    fill: "#5c4a36",
+    fontWeight: "normal",
+    fontStyle: "normal",
+    align: "left",
+    lineHeight: 1.5,
     ...overrides,
   };
 }
 
-export function createShapeObject(overrides?: Partial<PageObject>): PageObject {
+export function createShapeObject(overrides?: Partial<ShapeObject>): ShapeObject {
   return {
     id: nanoid(),
     type: "shape",
@@ -30,12 +35,12 @@ export function createShapeObject(overrides?: Partial<PageObject>): PageObject {
     rotation: 0,
     zIndex: 1,
     shapeType: "rect",
-    fill: "#6b4cff", // Premium Accent
+    fill: "#c4a882",
     ...overrides,
   };
 }
 
-export function createImageObject(overrides?: Partial<PageObject>): PageObject {
+export function createImageObject(overrides?: Partial<ImageObject>): ImageObject {
   return {
     id: nanoid(),
     type: "image",
@@ -45,12 +50,14 @@ export function createImageObject(overrides?: Partial<PageObject>): PageObject {
     height: 200,
     rotation: 0,
     zIndex: 1,
+    fit: "cover",
+    name: "Ảnh mới",
     src: "https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?q=80&w=600&auto=format&fit=crop",
     ...overrides,
   };
 }
 
-export function createVideoObject(overrides?: Partial<PageObject>): PageObject {
+export function createVideoObject(overrides?: Partial<VideoObject>): VideoObject {
   return {
     id: nanoid(),
     type: "video",
@@ -60,12 +67,15 @@ export function createVideoObject(overrides?: Partial<PageObject>): PageObject {
     height: 225,
     rotation: 0,
     zIndex: 1,
+    fit: "cover",
+    name: "Video mới",
     src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+    thumbnailSrc: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop",
     ...overrides,
   };
 }
 
-export function createEmptyPage(index: number, width: number, height: number): BookPage {
+export function createEmptyPage(index: number): BookPage {
   return {
     id: nanoid(),
     name: `Page ${index + 1}`,
@@ -78,13 +88,20 @@ export function clonePage(page: BookPage): BookPage {
     ...page,
     id: nanoid(),
     name: `${page.name} (Copy)`,
-    objects: page.objects.map((obj) => ({ ...obj, id: nanoid() })),
+    objects: page.objects.map((object) => ({ ...object, id: nanoid() }) as PageObject),
+  };
+}
+
+export function createMediaFolderSource(input: Omit<MediaFolderSource, "id">): MediaFolderSource {
+  return {
+    id: nanoid(),
+    ...input,
   };
 }
 
 export function normalizePageOrder(pages: BookPage[]): BookPage[] {
-  return pages.map((page, idx) => ({
+  return pages.map((page, index) => ({
     ...page,
-    side: idx % 2 === 0 ? "right" : "left",
+    side: index % 2 === 0 ? "right" : "left",
   }));
 }

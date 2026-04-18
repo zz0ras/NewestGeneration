@@ -2,61 +2,190 @@
 
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 import HTMLFlipBook from "react-pageflip";
-import { useEditorStore } from "@/stores/editor-store";
-import { BookDocument } from "@/lib/book/types";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useEditorStore } from "@/stores/editor-store";
+import type { BookDocument, PageObject } from "@/lib/book/types";
 
-/* ------------------------------------------------------------------ */
-/*  FlipBook handle type (react-pageflip's internal API)               */
-/* ------------------------------------------------------------------ */
 interface FlipBookHandle {
   pageFlip: () => {
     getPageCount?: () => number;
-    flipNext: () => void;
-    flipPrev: () => void;
-    turnToNextPage: () => void;
-    turnToPrevPage: () => void;
+    turnToPrevPage?: () => void;
+    turnToNextPage?: () => void;
     turnToPage: (page: number) => void;
     getCurrentPageIndex: () => number;
   };
 }
 
-/* ------------------------------------------------------------------ */
-/*  Spread helpers                                                     */
-/* ------------------------------------------------------------------ */
-function getSpreadLayout(pageCount: number, portrait: boolean, showCover: boolean = true): number[][] {
-  if (pageCount <= 0) return [];
-  if (portrait) return Array.from({ length: pageCount }, (_, i) => [i]);
-
-  const spreads: number[][] = [];
-  let start = 0;
-
-  if (showCover) {
-    spreads.push([0]);
-    start = 1;
-  }
-
-  for (let i = start; i < pageCount; i += 2) {
-    if (i < pageCount - 1) {
-      spreads.push([i, i + 1]);
-    } else {
-      spreads.push([i]);
-    }
-  }
-  return spreads;
+interface FlipBookEventData {
+  page?: number;
 }
 
-function getSpreadIndexByPage(pageIndex: number, spreads: number[][]): number {
-  const idx = spreads.findIndex((s) => s.includes(pageIndex));
-  return idx >= 0 ? idx : 0;
+interface FlipBookEvent {
+  data: number | FlipBookEventData;
 }
 
-/* ------------------------------------------------------------------ */
-/*  ViewerPage – single page rendered inside HTMLFlipBook               */
-/* ------------------------------------------------------------------ */
+interface FlipBookProps {
+  width: number;
+  height: number;
+  size: "fixed";
+  minWidth: number;
+  maxWidth: number;
+  minHeight: number;
+  maxHeight: number;
+  showCover: boolean;
+  maxShadowOpacity: number;
+  mobileScrollSupport: boolean;
+  drawShadow: boolean;
+  usePortrait: boolean;
+  startPage: number;
+  style: React.CSSProperties;
+  flippingTime: number;
+  startZIndex: number;
+  autoSize: boolean;
+  clickEventForward: boolean;
+  useMouseEvents: boolean;
+  swipeDistance: number;
+  showPageCorners: boolean;
+  disableFlipByClick: boolean;
+  onFlip: (event: FlipBookEvent) => void;
+  onInit: (event: FlipBookEvent) => void;
+  onUpdate: (event: FlipBookEvent) => void;
+  className: string;
+  children: React.ReactNode;
+}
+
+const FlipBookComponent = HTMLFlipBook as unknown as React.ForwardRefExoticComponent<
+  FlipBookProps & React.RefAttributes<FlipBookHandle>
+>;
+
+function extractPageIndex(eventData: number | FlipBookEventData): number {
+  if (typeof eventData === "number") return eventData;
+  if (typeof eventData.page === "number") return eventData.page;
+  return 0;
+}
+
+function renderViewerObject(object: PageObject) {
+  if (object.type === "shape") {
+    return (
+      <div
+        key={object.id}
+        style={{
+          position: "absolute",
+          left: object.x,
+          top: object.y,
+          width: object.width,
+          height: object.height,
+          background: object.fill,
+          transform: `rotate(${object.rotation}deg)`,
+          borderRadius: object.cornerRadius ?? 0,
+          zIndex: object.zIndex,
+        }}
+      />
+    );
+  }
+
+  if (object.type === "text") {
+    return (
+      <div
+        key={object.id}
+        style={{
+          position: "absolute",
+          left: object.x,
+          top: object.y,
+          width: object.width,
+          height: object.height,
+          color: object.fill,
+          fontSize: object.fontSize,
+          fontFamily: `${object.fontFamily}, sans-serif`,
+          fontWeight: object.fontWeight,
+          fontStyle: object.fontStyle,
+          lineHeight: object.lineHeight,
+          textAlign: object.align,
+          transform: `rotate(${object.rotation}deg)`,
+          whiteSpace: "pre-wrap",
+          zIndex: object.zIndex,
+        }}
+      >
+        {object.text}
+      </div>
+    );
+  }
+
+  if (object.type === "image") {
+    return (
+      <img
+        key={object.id}
+        src={object.src}
+        alt=""
+        style={{
+          position: "absolute",
+          left: object.x,
+          top: object.y,
+          width: object.width,
+          height: object.height,
+          objectFit: object.fit,
+          transform: `rotate(${object.rotation}deg)`,
+          zIndex: object.zIndex,
+        }}
+      />
+    );
+  }
+
+  return (
+    <div
+      key={object.id}
+      style={{
+        position: "absolute",
+        left: object.x,
+        top: object.y,
+        width: object.width,
+        height: object.height,
+        transform: `rotate(${object.rotation}deg)`,
+        zIndex: object.zIndex,
+        borderRadius: 18,
+        background: "linear-gradient(180deg, rgba(43,33,25,0.96), rgba(24,16,12,0.94))",
+        border: "1px solid rgba(196, 168, 130, 0.24)",
+        overflow: "hidden",
+      }}
+    >
+      {object.thumbnailSrc ? (
+        <img
+          src={object.thumbnailSrc}
+          alt=""
+          style={{ width: "100%", height: "100%", objectFit: object.fit, opacity: 0.55 }}
+        />
+      ) : null}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          padding: "16px 18px",
+          color: "#faf5ef",
+          background: "linear-gradient(180deg, rgba(18,12,9,0.12), rgba(18,12,9,0.44))",
+        }}
+      >
+        <span style={{ fontSize: 11, letterSpacing: "0.18em", color: "#d4bc9a", fontWeight: 700 }}>VIDEO</span>
+        <span style={{ fontSize: 18, fontWeight: 500, textAlign: "center" }}>{object.name ?? "Video"}</span>
+      </div>
+    </div>
+  );
+}
+
 const ViewerPage = forwardRef<
   HTMLDivElement,
-  { page: any; pageW: number; pageH: number; renderW: number; renderH: number; fitScale: number; number: number; isHard: boolean }
+  {
+    page: BookDocument["pages"][number];
+    pageW: number;
+    pageH: number;
+    renderW: number;
+    renderH: number;
+    fitScale: number;
+    number: number;
+    isHard: boolean;
+  }
 >(function ViewerPage({ page, pageW, pageH, renderW, renderH, fitScale, number, isHard }, ref) {
   return (
     <div ref={ref} className="flip-page" style={{ width: renderW, height: renderH }} data-density={isHard ? "hard" : "soft"}>
@@ -72,61 +201,24 @@ const ViewerPage = forwardRef<
             position: "relative",
           }}
         >
-          {page.objects.map((obj: any) => {
-            if (obj.type === "shape") {
-              return (
-                <div key={obj.id} style={{
-                  position: "absolute", left: obj.x, top: obj.y,
-                  width: obj.width, height: obj.height,
-                  background: obj.fill,
-                  transform: `rotate(${obj.rotation}deg)`,
-                  borderRadius: obj.cornerRadius || 0,
-                  zIndex: obj.zIndex,
-                }} />
-              );
-            }
-            if (obj.type === "text") {
-              return (
-                <div key={obj.id} style={{
-                  position: "absolute", left: obj.x, top: obj.y,
-                  width: obj.width, height: obj.height,
-                  color: obj.fill || "#5c4a36",
-                  fontSize: obj.fontSize,
-                  fontFamily: obj.fontFamily || "Inter, sans-serif",
-                  fontWeight: (obj.fontWeight || obj.fontStyle === "bold") ? "bold" : "normal",
-                  fontStyle: obj.fontStyle === "italic" ? "italic" : "normal",
-                  lineHeight: obj.lineHeight || 1.5,
-                  transform: `rotate(${obj.rotation}deg)`,
-                  whiteSpace: "pre-wrap",
-                  zIndex: obj.zIndex,
-                }}>
-                  {obj.text}
-                </div>
-              );
-            }
-            if (obj.type === "image") {
-              return (
-                <img key={obj.id} src={obj.src} alt=""
-                  style={{
-                    position: "absolute", left: obj.x, top: obj.y,
-                    width: obj.width, height: obj.height,
-                    objectFit: "cover",
-                    transform: `rotate(${obj.rotation}deg)`,
-                    zIndex: obj.zIndex,
-                  }} />
-              );
-            }
-            return null;
-          })}
+          {[...page.objects]
+            .sort((left, right) => left.zIndex - right.zIndex)
+            .map((object) => renderViewerObject(object))}
 
-          {/* Page number */}
-          <div style={{
-            position: "absolute", bottom: 20, left: 0, right: 0,
-            textAlign: "center", fontSize: 11,
-            fontFamily: "Inter, sans-serif",
-            color: "#a0845e", letterSpacing: "0.05em",
-            zIndex: 100,
-          }}>
+          <div
+            style={{
+              position: "absolute",
+              bottom: 20,
+              left: 0,
+              right: 0,
+              textAlign: "center",
+              fontSize: 11,
+              fontFamily: "Inter, sans-serif",
+              color: "#a0845e",
+              letterSpacing: "0.05em",
+              zIndex: 100,
+            }}
+          >
             {number}
           </div>
         </div>
@@ -135,9 +227,31 @@ const ViewerPage = forwardRef<
   );
 });
 
-/* ------------------------------------------------------------------ */
-/*  BookViewer – main component                                         */
-/* ------------------------------------------------------------------ */
+function getSpreadLayout(pageCount: number, portrait: boolean, showCover = true): number[][] {
+  if (pageCount <= 0) return [];
+  if (portrait) return Array.from({ length: pageCount }, (_, index) => [index]);
+
+  const spreads: number[][] = [];
+  let start = 0;
+
+  if (showCover) {
+    spreads.push([0]);
+    start = 1;
+  }
+
+  for (let index = start; index < pageCount; index += 2) {
+    if (index < pageCount - 1) spreads.push([index, index + 1]);
+    else spreads.push([index]);
+  }
+
+  return spreads;
+}
+
+function getSpreadIndexByPage(pageIndex: number, spreads: number[][]): number {
+  const index = spreads.findIndex((spread) => spread.includes(pageIndex));
+  return index >= 0 ? index : 0;
+}
+
 export function BookViewer({ document }: { document: BookDocument }) {
   const selectedPageId = useEditorStore((state) => state.selectedPageId);
   const selectPage = useEditorStore((state) => state.selectPage);
@@ -148,22 +262,14 @@ export function BookViewer({ document }: { document: BookDocument }) {
   const [currentPage, setCurrentPage] = useState(0);
   const [readySignature, setReadySignature] = useState("");
 
-  // Safely extract page index from react-pageflip event
-  const extractPageIndex = (eventData: any): number => {
-    if (typeof eventData === "number") return eventData;
-    if (eventData && typeof eventData === "object" && "page" in eventData) return Number(eventData.page) || 0;
-    return Number(eventData) || 0;
-  };
-
-  // Measure container
   useEffect(() => {
     const node = stageRef.current;
     if (!node) return;
 
     const updateSize = () => {
-      const w = Math.floor(node.clientWidth);
-      const h = Math.floor(node.clientHeight);
-      setStageSize((cur) => (cur.width === w && cur.height === h ? cur : { width: w, height: h }));
+      const width = Math.floor(node.clientWidth);
+      const height = Math.floor(node.clientHeight);
+      setStageSize((current) => (current.width === width && current.height === height ? current : { width, height }));
     };
 
     updateSize();
@@ -172,37 +278,38 @@ export function BookViewer({ document }: { document: BookDocument }) {
     return () => observer.disconnect();
   }, []);
 
-  // Sync from editor: when selectedPageId changes, flip to that spread
-  const selectedPageIndex = document.pages.findIndex((p) => p.id === selectedPageId);
+  const selectedPageIndex = document.pages.findIndex((page) => page.id === selectedPageId);
   useEffect(() => {
     if (selectedPageIndex < 0) return;
     const api = bookRef.current?.pageFlip();
     if (!api) return;
+
     try {
-      const curIdx = api.getCurrentPageIndex();
-      // Only flip if we're on a different spread
-      if (Math.abs(curIdx - selectedPageIndex) >= 1) {
+      const currentIndex = api.getCurrentPageIndex();
+      if (Math.abs(currentIndex - selectedPageIndex) >= 1) {
         api.turnToPage(selectedPageIndex);
       }
     } catch {
-      // pageFlip not ready yet
+      return;
     }
   }, [selectedPageIndex]);
 
-  // Sync back to editor: when user flips in preview, update selectedPageId
-  const handleFlip = useCallback((event: any) => {
-    const newPage = extractPageIndex(event.data);
-    setCurrentPage(newPage);
-    if (document.pages[newPage]) {
-      selectPage(document.pages[newPage].id);
-    }
-  }, [document.pages, selectPage]);
+  const handleFlip = useCallback(
+    (event: FlipBookEvent) => {
+      const newPage = extractPageIndex(event.data);
+      setCurrentPage(newPage);
+      if (document.pages[newPage]) {
+        selectPage(document.pages[newPage].id);
+      }
+    },
+    [document.pages, selectPage],
+  );
 
   if (!document.pages.length) {
     return (
-      <div className="flex items-center justify-center h-full" style={{ color: '#c4a882' }}>
+      <div className="flex h-full items-center justify-center" style={{ color: "#c4a882" }}>
         <div className="text-center">
-          <div className="text-5xl mb-4">📖</div>
+          <div className="mb-4 text-5xl">📖</div>
           <p className="text-lg">Sách trống</p>
         </div>
       </div>
@@ -211,21 +318,17 @@ export function BookViewer({ document }: { document: BookDocument }) {
 
   const stageWidth = Math.max(stageSize.width, 1);
   const stageHeight = Math.max(stageSize.height, 1);
-  const spreadCount = 2; // always show 2-page spread
-  const availablePerPage = stageWidth / spreadCount;
-  const fitScale = Math.min(
-    availablePerPage / document.pageSize.width,
-    stageHeight / document.pageSize.height,
-  );
+  const availablePerPage = stageWidth / 2;
+  const fitScale = Math.min(availablePerPage / document.pageSize.width, stageHeight / document.pageSize.height);
   const safeScale = Number.isFinite(fitScale) && fitScale > 0 ? fitScale : 0.1;
   const renderW = Math.max(1, Math.floor(document.pageSize.width * safeScale));
   const renderH = Math.max(1, Math.floor(document.pageSize.height * safeScale));
 
   const spreads = getSpreadLayout(document.pages.length, false);
   const currentSpreadIndex = getSpreadIndexByPage(currentPage, spreads);
-  const viewerSig = `${document.pages.length}:${renderW}:${renderH}`;
+  const viewerSignature = `${document.pages.length}:${renderW}:${renderH}`;
   const hasStage = stageSize.width > 0 && stageSize.height > 0 && document.pages.length > 0;
-  const isReady = readySignature === viewerSig;
+  const isReady = readySignature === viewerSignature;
   const canPrev = isReady && currentSpreadIndex > 0;
   const canNext = isReady && currentSpreadIndex < spreads.length - 1;
 
@@ -247,35 +350,23 @@ export function BookViewer({ document }: { document: BookDocument }) {
   const isBackCover = currentPage === document.pages.length - 1 && document.pages.length % 2 === 0 && currentPage !== 0;
 
   let translateX = 0;
-  if (isFrontCover) {
-    translateX = -(renderW / 2);
-  } else if (isBackCover) {
-    translateX = renderW / 2;
-  }
+  if (isFrontCover) translateX = -(renderW / 2);
+  else if (isBackCover) translateX = renderW / 2;
 
   return (
     <section className="viewer-section">
       <div className="viewer-shell">
-        {/* Prev button */}
-        <button
-          type="button"
-          className="viewer-nav viewer-nav--prev"
-          onClick={handlePrev}
-          disabled={!canPrev}
-          aria-label="Trang trước"
-        >
+        <button type="button" className="viewer-nav viewer-nav--prev" onClick={handlePrev} disabled={!canPrev} aria-label="Trang trước">
           <ChevronLeft size={24} />
         </button>
 
-        {/* Flipbook stage */}
-        <div 
-          className="viewer-stage" 
+        <div
+          className="viewer-stage"
           ref={stageRef}
-          style={{ transform: `translateX(${translateX}px)`, transition: 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)' }}
+          style={{ transform: `translateX(${translateX}px)`, transition: "transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)" }}
         >
           {hasStage ? (
-            // @ts-ignore react-pageflip types
-            <HTMLFlipBook
+            <FlipBookComponent
               ref={bookRef}
               width={renderW}
               height={renderH}
@@ -284,7 +375,7 @@ export function BookViewer({ document }: { document: BookDocument }) {
               maxWidth={renderW}
               minHeight={renderH}
               maxHeight={renderH}
-              showCover={true}
+              showCover
               maxShadowOpacity={0.35}
               mobileScrollSupport
               drawShadow
@@ -300,18 +391,18 @@ export function BookViewer({ document }: { document: BookDocument }) {
               showPageCorners
               disableFlipByClick={false}
               onFlip={handleFlip}
-              onInit={(event: any) => {
+              onInit={(event) => {
                 setCurrentPage(extractPageIndex(event.data));
-                setReadySignature(viewerSig);
+                setReadySignature(viewerSignature);
               }}
-              onUpdate={(event: any) => {
+              onUpdate={(event) => {
                 setCurrentPage(extractPageIndex(event.data));
-                setReadySignature(viewerSig);
+                setReadySignature(viewerSignature);
               }}
               className="flipbook-viewer"
             >
-              {document.pages.map((page, i) => {
-                const isHard = i === 0 || i === document.pages.length - 1;
+              {document.pages.map((page, index) => {
+                const isHard = index === 0 || index === document.pages.length - 1;
                 return (
                   <ViewerPage
                     key={page.id}
@@ -321,30 +412,22 @@ export function BookViewer({ document }: { document: BookDocument }) {
                     renderW={renderW}
                     renderH={renderH}
                     fitScale={safeScale}
-                    number={i + 1}
+                    number={index + 1}
                     isHard={isHard}
                   />
-                )
+                );
               })}
-            </HTMLFlipBook>
+            </FlipBookComponent>
           ) : null}
         </div>
 
-        {/* Next button */}
-        <button
-          type="button"
-          className="viewer-nav viewer-nav--next"
-          onClick={handleNext}
-          disabled={!canNext}
-          aria-label="Trang sau"
-        >
+        <button type="button" className="viewer-nav viewer-nav--next" onClick={handleNext} disabled={!canNext} aria-label="Trang sau">
           <ChevronRight size={24} />
         </button>
       </div>
 
-      {/* Spread indicator */}
       <div className="viewer-indicator">
-        Trang {currentPage + 1}–{Math.min(currentPage + 2, document.pages.length)} / {document.pages.length}
+        Trang {currentPage + 1}-{Math.min(currentPage + 2, document.pages.length)} / {document.pages.length}
       </div>
 
       <style>{viewerStyles}</style>
@@ -352,9 +435,6 @@ export function BookViewer({ document }: { document: BookDocument }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Scoped CSS (warm pastel brown theme)                               */
-/* ------------------------------------------------------------------ */
 const viewerStyles = `
 .viewer-section {
   position: relative;
