@@ -59,6 +59,12 @@ const FlipBookComponent = HTMLFlipBook as unknown as React.ForwardRefExoticCompo
 >;
 
 const VIEWER_SCALE_RATIO = 0.85;
+const FLIP_ANIMATION_MS = 800;
+const FLIP_VISUAL_SETTLE_MS = 140;
+
+type FlipVisualState = "idle" | "turning";
+type TurnRole = "turning" | "facing" | "rest";
+type TurnDirection = "forward" | "backward" | "none";
 
 function extractPageIndex(eventData: number | FlipBookEventData): number {
   if (typeof eventData === "number") return eventData;
@@ -187,10 +193,21 @@ const ViewerPage = forwardRef<
     fitScale: number;
     number: number;
     isHard: boolean;
+    side: "left" | "right";
+    flipState: FlipVisualState;
+    turnRole: TurnRole;
   }
->(function ViewerPage({ page, pageW, pageH, renderW, renderH, fitScale, number, isHard }, ref) {
+>(function ViewerPage({ page, pageW, pageH, renderW, renderH, fitScale, number, isHard, side, flipState, turnRole }, ref) {
   return (
-    <div ref={ref} className="flip-page" style={{ width: renderW, height: renderH }} data-density={isHard ? "hard" : "soft"}>
+    <div
+      ref={ref}
+      className="flip-page"
+      style={{ width: renderW, height: renderH }}
+      data-density={isHard ? "hard" : "soft"}
+      data-side={side}
+      data-flip-state={flipState}
+      data-turn-role={turnRole}
+    >
       <div className="flip-page__viewport" style={{ width: renderW, height: renderH }}>
         <div
           className="flip-page__surface"
@@ -260,9 +277,13 @@ export function BookViewer({ document }: { document: BookDocument }) {
 
   const stageRef = useRef<HTMLDivElement | null>(null);
   const bookRef = useRef<FlipBookHandle | null>(null);
+  const settleTimeoutRef = useRef<number | null>(null);
+  const previousPageRef = useRef(0);
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [currentPage, setCurrentPage] = useState(0);
   const [readySignature, setReadySignature] = useState("");
+  const [flipVisualState, setFlipVisualState] = useState<FlipVisualState>("idle");
+  const [turnDirection, setTurnDirection] = useState<TurnDirection>("none");
 
   useEffect(() => {
     const node = stageRef.current;
@@ -278,6 +299,14 @@ export function BookViewer({ document }: { document: BookDocument }) {
     const observer = new ResizeObserver(updateSize);
     observer.observe(node);
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (settleTimeoutRef.current !== null) {
+        window.clearTimeout(settleTimeoutRef.current);
+      }
+    };
   }, []);
 
   const selectedPageIndex = document.pages.findIndex((page) => page.id === selectedPageId);
@@ -299,10 +328,19 @@ export function BookViewer({ document }: { document: BookDocument }) {
   const handleFlip = useCallback(
     (event: FlipBookEvent) => {
       const newPage = extractPageIndex(event.data);
+      const direction: TurnDirection = newPage > previousPageRef.current ? "forward" : newPage < previousPageRef.current ? "backward" : "none";
+
+      if (settleTimeoutRef.current !== null) {
+        window.clearTimeout(settleTimeoutRef.current);
+      }
+
+      setFlipVisualState("turning");
+      setTurnDirection(direction);
       setCurrentPage(newPage);
       if (document.pages[newPage]) {
         selectPage(document.pages[newPage].id);
       }
+      previousPageRef.current = newPage;
     },
     [document.pages, selectPage],
   );
@@ -328,6 +366,7 @@ export function BookViewer({ document }: { document: BookDocument }) {
 
   const spreads = getSpreadLayout(document.pages.length, false);
   const currentSpreadIndex = getSpreadIndexByPage(currentPage, spreads);
+  const currentSpread = spreads[currentSpreadIndex] ?? [];
   const viewerSignature = `${document.pages.length}:${renderW}:${renderH}`;
   const hasStage = stageSize.width > 0 && stageSize.height > 0 && document.pages.length > 0;
   const isReady = readySignature === viewerSignature;
@@ -384,7 +423,7 @@ export function BookViewer({ document }: { document: BookDocument }) {
               usePortrait={false}
               startPage={selectedPageIndex >= 0 ? selectedPageIndex : 0}
               style={{}}
-              flippingTime={800}
+              flippingTime={FLIP_ANIMATION_MS}
               startZIndex={10}
               autoSize
               clickEventForward
@@ -394,17 +433,43 @@ export function BookViewer({ document }: { document: BookDocument }) {
               disableFlipByClick={false}
               onFlip={handleFlip}
               onInit={(event) => {
-                setCurrentPage(extractPageIndex(event.data));
+                const initialPage = extractPageIndex(event.data);
+                previousPageRef.current = initialPage;
+                setCurrentPage(initialPage);
                 setReadySignature(viewerSignature);
+                setFlipVisualState("idle");
+                setTurnDirection("none");
               }}
               onUpdate={(event) => {
-                setCurrentPage(extractPageIndex(event.data));
+                const updatedPage = extractPageIndex(event.data);
+                setCurrentPage(updatedPage);
                 setReadySignature(viewerSignature);
+                previousPageRef.current = updatedPage;
+                if (settleTimeoutRef.current !== null) {
+                  window.clearTimeout(settleTimeoutRef.current);
+                }
+                settleTimeoutRef.current = window.setTimeout(() => {
+                  setFlipVisualState("idle");
+                  setTurnDirection("none");
+                  settleTimeoutRef.current = null;
+                }, FLIP_VISUAL_SETTLE_MS);
               }}
               className="flipbook-viewer"
             >
               {document.pages.map((page, index) => {
                 const isHard = index === 0 || index === document.pages.length - 1;
+                const side = index === 0 ? "right" : index === document.pages.length - 1 ? "left" : index % 2 === 0 ? "left" : "right";
+                const isActiveSpreadPage = currentSpread.includes(index);
+                let turnRole: TurnRole = "rest";
+
+                if (flipVisualState === "turning" && isActiveSpreadPage) {
+                  if (turnDirection === "forward") {
+                    turnRole = side === "right" ? "turning" : "facing";
+                  } else if (turnDirection === "backward") {
+                    turnRole = side === "left" ? "turning" : "facing";
+                  }
+                }
+
                 return (
                   <ViewerPage
                     key={page.id}
@@ -416,6 +481,9 @@ export function BookViewer({ document }: { document: BookDocument }) {
                     fitScale={safeScale}
                     number={index + 1}
                     isHard={isHard}
+                    side={side}
+                    flipState={flipVisualState}
+                    turnRole={turnRole}
                   />
                 );
               })}
@@ -526,6 +594,87 @@ const viewerStyles = `
   box-shadow:
     inset 0 0 0 1px rgba(92, 74, 54, 0.06),
     0 12px 24px rgba(92, 74, 54, 0.06);
+}
+
+.flip-page__surface::before,
+.flip-page__surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.flip-page__surface::before {
+  z-index: 1;
+}
+
+.flip-page__surface::after {
+  z-index: 2;
+}
+
+.flip-page[data-side="right"][data-density="soft"] .flip-page__surface::before {
+  background:
+    linear-gradient(90deg, rgba(74, 60, 48, 0.11) 0%, rgba(74, 60, 48, 0.06) 4%, rgba(74, 60, 48, 0.02) 9%, rgba(74, 60, 48, 0) 14%);
+}
+
+.flip-page[data-side="right"][data-density="soft"] .flip-page__surface::after {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.08) 3%, rgba(255, 255, 255, 0) 8%);
+}
+
+.flip-page[data-side="left"][data-density="soft"] .flip-page__surface::before {
+  background:
+    linear-gradient(270deg, rgba(74, 60, 48, 0.11) 0%, rgba(74, 60, 48, 0.06) 4%, rgba(74, 60, 48, 0.02) 9%, rgba(74, 60, 48, 0) 14%);
+}
+
+.flip-page[data-side="left"][data-density="soft"] .flip-page__surface::after {
+  background:
+    linear-gradient(270deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.08) 3%, rgba(255, 255, 255, 0) 8%);
+}
+
+.flip-page[data-density="soft"][data-flip-state="turning"][data-turn-role="turning"][data-side="right"] .flip-page__surface::before {
+  background:
+    linear-gradient(90deg, rgba(74, 60, 48, 0.22) 0%, rgba(74, 60, 48, 0.14) 6%, rgba(74, 60, 48, 0.08) 12%, rgba(74, 60, 48, 0.03) 18%, rgba(74, 60, 48, 0) 24%);
+}
+
+.flip-page[data-density="soft"][data-flip-state="turning"][data-turn-role="turning"][data-side="right"] .flip-page__surface::after {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.14) 4%, rgba(255, 255, 255, 0.04) 8%, rgba(255, 255, 255, 0) 14%);
+}
+
+.flip-page[data-density="soft"][data-flip-state="turning"][data-turn-role="turning"][data-side="left"] .flip-page__surface::before {
+  background:
+    linear-gradient(270deg, rgba(74, 60, 48, 0.22) 0%, rgba(74, 60, 48, 0.14) 6%, rgba(74, 60, 48, 0.08) 12%, rgba(74, 60, 48, 0.03) 18%, rgba(74, 60, 48, 0) 24%);
+}
+
+.flip-page[data-density="soft"][data-flip-state="turning"][data-turn-role="turning"][data-side="left"] .flip-page__surface::after {
+  background:
+    linear-gradient(270deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.14) 4%, rgba(255, 255, 255, 0.04) 8%, rgba(255, 255, 255, 0) 14%);
+}
+
+.flip-page[data-density="soft"][data-flip-state="turning"][data-turn-role="facing"][data-side="right"] .flip-page__surface::before {
+  background:
+    linear-gradient(90deg, rgba(74, 60, 48, 0.16) 0%, rgba(74, 60, 48, 0.09) 5%, rgba(74, 60, 48, 0.04) 10%, rgba(74, 60, 48, 0) 16%);
+}
+
+.flip-page[data-density="soft"][data-flip-state="turning"][data-turn-role="facing"][data-side="right"] .flip-page__surface::after {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.08) 3%, rgba(255, 255, 255, 0) 9%);
+}
+
+.flip-page[data-density="soft"][data-flip-state="turning"][data-turn-role="facing"][data-side="left"] .flip-page__surface::before {
+  background:
+    linear-gradient(270deg, rgba(74, 60, 48, 0.16) 0%, rgba(74, 60, 48, 0.09) 5%, rgba(74, 60, 48, 0.04) 10%, rgba(74, 60, 48, 0) 16%);
+}
+
+.flip-page[data-density="soft"][data-flip-state="turning"][data-turn-role="facing"][data-side="left"] .flip-page__surface::after {
+  background:
+    linear-gradient(270deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.08) 3%, rgba(255, 255, 255, 0) 9%);
+}
+
+.flip-page[data-density="hard"] .flip-page__surface::before,
+.flip-page[data-density="hard"] .flip-page__surface::after {
+  opacity: 0.2;
 }
 
 .viewer-indicator {
