@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import type { BookPage, ImageObject, MediaFolderSource, PageObject, ShapeObject, TextObject, VideoObject } from "./types";
+import type { AudioObject, BookPage, ImageObject, MediaFolderSource, PageObject, ShapeObject, TextObject, VideoObject } from "./types";
 import { DEFAULT_FONT_FAMILY } from "@/lib/fonts/presets";
 
 export function createTextObject(overrides?: Partial<TextObject>): TextObject {
@@ -71,6 +71,22 @@ export function createVideoObject(overrides?: Partial<VideoObject>): VideoObject
     name: "Video mới",
     src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
     thumbnailSrc: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop",
+    ...overrides,
+  };
+}
+
+export function createAudioObject(overrides?: Partial<AudioObject>): AudioObject {
+  return {
+    id: nanoid(),
+    type: "audio",
+    x: 60,
+    y: 80,
+    width: 300,
+    height: 96,
+    rotation: 0,
+    zIndex: 1,
+    name: "Audio moi",
+    src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
     ...overrides,
   };
 }

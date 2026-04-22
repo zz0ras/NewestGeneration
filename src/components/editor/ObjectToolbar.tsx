@@ -1,9 +1,9 @@
 import { useEditorStore } from "@/stores/editor-store";
-import { Type, Square, Image as ImageIcon, Video, Palette, FolderOpen } from "lucide-react";
+import { Type, Square, Image as ImageIcon, Video, Palette, FolderOpen, Volume2 } from "lucide-react";
 import type { ObjectTemplateType } from "@/lib/book/types";
 
 interface ObjectToolbarProps {
-  onStartMediaInsert: (type: "image" | "video") => void;
+  onStartMediaInsert: (type: "image" | "video" | "audio") => void;
   onToggleMediaPanel: () => void;
   isMediaPanelOpen: boolean;
 }
@@ -20,10 +20,11 @@ export function ObjectToolbar({ onStartMediaInsert, onToggleMediaPanel, isMediaP
   const disabled = !selectedPageId;
 
   const tools: ToolDefinition[] = [
-    { type: "text", icon: Type, label: "Văn bản" },
-    { type: "shape", icon: Square, label: "Hình khối" },
-    { type: "image", icon: ImageIcon, label: "Hình ảnh" },
+    { type: "text", icon: Type, label: "Van ban" },
+    { type: "shape", icon: Square, label: "Hinh khoi" },
+    { type: "image", icon: ImageIcon, label: "Hinh anh" },
     { type: "video", icon: Video, label: "Video" },
+    { type: "audio", icon: Volume2, label: "Audio" },
   ];
 
   return (
@@ -39,7 +40,7 @@ export function ObjectToolbar({ onStartMediaInsert, onToggleMediaPanel, isMediaP
           key={type}
           disabled={disabled}
           onClick={() => {
-            if (type === "image" || type === "video") {
+            if (type === "image" || type === "video" || type === "audio") {
               onStartMediaInsert(type);
               return;
             }
@@ -58,7 +59,7 @@ export function ObjectToolbar({ onStartMediaInsert, onToggleMediaPanel, isMediaP
               boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
             }}
           >
-            {type === "image" || type === "video" ? `${label} từ media` : label}
+            {type === "image" || type === "video" || type === "audio" ? `${label} tu media` : label}
           </div>
         </button>
       ))}
@@ -88,7 +89,7 @@ export function ObjectToolbar({ onStartMediaInsert, onToggleMediaPanel, isMediaP
       <button
         disabled={disabled}
         className="glass-button group relative rounded-xl p-3 disabled:pointer-events-none disabled:opacity-20"
-        title="Chủ đề"
+        title="Chu de"
         style={{ color: "#c4a882" }}
       >
         <Palette size={19} className="transition-transform group-hover:scale-110" />
@@ -101,7 +102,7 @@ export function ObjectToolbar({ onStartMediaInsert, onToggleMediaPanel, isMediaP
             boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
           }}
         >
-          Chủ đề
+          Chu de
         </div>
       </button>
     </aside>

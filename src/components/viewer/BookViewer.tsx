@@ -3,6 +3,7 @@
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 import HTMLFlipBook from "react-pageflip";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { findSpreadAudioObject } from "@/lib/book/spread-audio";
 import { useEditorStore } from "@/stores/editor-store";
 import type { BookDocument, PageObject } from "@/lib/book/types";
 
@@ -136,6 +137,77 @@ function renderViewerObject(object: PageObject) {
           zIndex: object.zIndex,
         }}
       />
+    );
+  }
+
+  if (object.type === "audio") {
+    return (
+      <div
+        key={object.id}
+        style={{
+          position: "absolute",
+          left: object.x,
+          top: object.y,
+          width: object.width,
+          height: object.height,
+          transform: `rotate(${object.rotation}deg)`,
+          zIndex: object.zIndex,
+          borderRadius: 20,
+          background: "linear-gradient(180deg, rgba(39,29,22,0.98), rgba(24,18,14,0.96))",
+          border: "1px solid rgba(196, 168, 130, 0.24)",
+          boxShadow: "0 14px 30px rgba(0,0,0,0.18)",
+          overflow: "hidden",
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          padding: "18px 22px",
+        }}
+      >
+        <div
+          style={{
+            width: 42,
+            height: 42,
+            borderRadius: 999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "#c4a882",
+            color: "#1a1410",
+            fontSize: 20,
+            fontWeight: 700,
+            flexShrink: 0,
+          }}
+        >
+          ♪
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 11, letterSpacing: "0.18em", color: "#d4bc9a", fontWeight: 700 }}>AUDIO</div>
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 18,
+              color: "#faf5ef",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {object.name ?? "Audio track"}
+          </div>
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 11,
+              color: "rgba(250,245,239,0.58)",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {object.src}
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -277,6 +349,8 @@ export function BookViewer({ document }: { document: BookDocument }) {
 
   const stageRef = useRef<HTMLDivElement | null>(null);
   const bookRef = useRef<FlipBookHandle | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const activeAudioKeyRef = useRef<string | null>(null);
   const settleTimeoutRef = useRef<number | null>(null);
   const previousPageRef = useRef(0);
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
@@ -345,28 +419,21 @@ export function BookViewer({ document }: { document: BookDocument }) {
     [document.pages, selectPage],
   );
 
-  if (!document.pages.length) {
-    return (
-      <div className="flex h-full items-center justify-center" style={{ color: "#c4a882" }}>
-        <div className="text-center">
-          <div className="mb-4 text-5xl">📖</div>
-          <p className="text-lg">Sách trống</p>
-        </div>
-      </div>
-    );
-  }
-
+  const isEmptyDocument = document.pages.length === 0;
   const stageWidth = Math.max(stageSize.width, 1);
   const stageHeight = Math.max(stageSize.height, 1);
+  const pageWidth = Math.max(document.pageSize.width, 1);
+  const pageHeight = Math.max(document.pageSize.height, 1);
   const availablePerPage = stageWidth / 2;
-  const fitScale = Math.min(availablePerPage / document.pageSize.width, stageHeight / document.pageSize.height);
+  const fitScale = Math.min(availablePerPage / pageWidth, stageHeight / pageHeight);
   const safeScale = Number.isFinite(fitScale) && fitScale > 0 ? fitScale * VIEWER_SCALE_RATIO : 0.1;
-  const renderW = Math.max(1, Math.floor(document.pageSize.width * safeScale));
-  const renderH = Math.max(1, Math.floor(document.pageSize.height * safeScale));
+  const renderW = Math.max(1, Math.floor(pageWidth * safeScale));
+  const renderH = Math.max(1, Math.floor(pageHeight * safeScale));
 
   const spreads = getSpreadLayout(document.pages.length, false);
   const currentSpreadIndex = getSpreadIndexByPage(currentPage, spreads);
   const currentSpread = spreads[currentSpreadIndex] ?? [];
+  const currentSpreadAudio = findSpreadAudioObject(document, currentSpread);
   const viewerSignature = `${document.pages.length}:${renderW}:${renderH}`;
   const hasStage = stageSize.width > 0 && stageSize.height > 0 && document.pages.length > 0;
   const isReady = readySignature === viewerSignature;
@@ -394,8 +461,53 @@ export function BookViewer({ document }: { document: BookDocument }) {
   if (isFrontCover) translateX = -(renderW / 2);
   else if (isBackCover) translateX = renderW / 2;
 
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const nextAudioKey = currentSpreadAudio ? `${currentSpreadAudio.id}:${currentSpreadAudio.src}` : null;
+    if (!currentSpreadAudio) {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+      activeAudioKeyRef.current = null;
+      return;
+    }
+
+    if (activeAudioKeyRef.current === nextAudioKey) return;
+
+    audio.pause();
+    audio.currentTime = 0;
+    audio.src = currentSpreadAudio.src;
+    activeAudioKeyRef.current = nextAudioKey;
+    void audio.play().catch(() => {});
+  }, [currentSpreadAudio]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    return () => {
+      if (!audio) return;
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+      activeAudioKeyRef.current = null;
+    };
+  }, []);
+
+  if (isEmptyDocument) {
+    return (
+      <div className="flex h-full items-center justify-center" style={{ color: "#c4a882" }}>
+        <div className="text-center">
+          <div className="mb-4 text-5xl">📖</div>
+          <p className="text-lg">Sách trống</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <section className="viewer-section">
+      <audio ref={audioRef} hidden preload="auto" />
       <div className="viewer-shell">
         <button type="button" className="viewer-nav viewer-nav--prev" onClick={handlePrev} disabled={!canPrev} aria-label="Trang trước">
           <ChevronLeft size={24} />

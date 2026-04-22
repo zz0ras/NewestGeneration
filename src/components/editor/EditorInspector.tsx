@@ -17,7 +17,11 @@ function isTextObject(object: PageObject | null): object is TextObject {
   return object?.type === "text";
 }
 
-function isMediaObject(object: PageObject | null): object is Extract<PageObject, { type: "image" | "video" }> {
+function isMediaObject(object: PageObject | null): object is Extract<PageObject, { type: "image" | "video" | "audio" }> {
+  return object?.type === "image" || object?.type === "video" || object?.type === "audio";
+}
+
+function isVisualMediaObject(object: PageObject | null): object is Extract<PageObject, { type: "image" | "video" }> {
   return object?.type === "image" || object?.type === "video";
 }
 
@@ -315,26 +319,28 @@ export function EditorInspector({ onRequestClose }: EditorInspectorProps) {
         ) : null}
 
         {isMediaObject(selectedObject) ? (
-          <Section title={selectedObject.type === "image" ? "Image" : "Video"}>
+          <Section title={selectedObject.type === "image" ? "Image" : selectedObject.type === "video" ? "Video" : "Audio"}>
             <div className="rounded-2xl bg-[rgba(250,245,239,0.04)] px-4 py-3 text-sm text-latte/80">
               <div className="font-medium text-cream">{selectedObject.name || "Media object"}</div>
               <div className="mt-1 break-all text-xs text-latte/60">{selectedObject.src}</div>
             </div>
-            <div>
-              <FieldLabel>Render mode</FieldLabel>
-              <div className="grid grid-cols-2 gap-2">
-                {(["cover", "contain"] as const).map((fit) => (
-                  <button
-                    key={fit}
-                    type="button"
-                    onClick={() => selectedPage && updateObject(selectedPage.id, selectedObject.id, { fit })}
-                    className={`rounded-xl border px-3 py-2 text-sm transition ${selectedObject.fit === fit ? "border-[rgba(196,168,130,0.42)] bg-[rgba(196,168,130,0.18)] text-cream" : "border-[rgba(196,168,130,0.14)] bg-[rgba(250,245,239,0.04)] text-latte/80"}`}
-                  >
-                    {fit}
-                  </button>
-                ))}
+            {isVisualMediaObject(selectedObject) ? (
+              <div>
+                <FieldLabel>Render mode</FieldLabel>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["cover", "contain"] as const).map((fit) => (
+                    <button
+                      key={fit}
+                      type="button"
+                      onClick={() => selectedPage && updateObject(selectedPage.id, selectedObject.id, { fit })}
+                      className={`rounded-xl border px-3 py-2 text-sm transition ${selectedObject.fit === fit ? "border-[rgba(196,168,130,0.42)] bg-[rgba(196,168,130,0.18)] text-cream" : "border-[rgba(196,168,130,0.14)] bg-[rgba(250,245,239,0.04)] text-latte/80"}`}
+                    >
+                      {fit}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : null}
           </Section>
         ) : null}
 

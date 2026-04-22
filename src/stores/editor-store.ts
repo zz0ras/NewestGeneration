@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { sampleBookDocument } from "@/lib/book/seed";
 import {
+  createAudioObject,
   clonePage,
   createEmptyPage,
   createImageObject,
@@ -12,7 +13,9 @@ import {
   createVideoObject,
   normalizePageOrder,
 } from "@/lib/book/factories";
+import { hasSpreadAudioConflict } from "@/lib/book/spread-audio";
 import type {
+  AudioObject,
   BookDocument,
   BookPage,
   DocumentFontAsset,
@@ -88,6 +91,8 @@ function createObject(type: ObjectTemplateType): PageObject {
       return createShapeObject();
     case "video":
       return createVideoObject();
+    case "audio":
+      return createAudioObject();
   }
 }
 
@@ -131,8 +136,8 @@ function mapObject(
   return objects.map((object) => (object.id === objectId ? updater(object) : object));
 }
 
-function isMediaObject(object: PageObject): object is ImageObject | VideoObject {
-  return object.type === "image" || object.type === "video";
+function isMediaObject(object: PageObject): object is ImageObject | VideoObject | AudioObject {
+  return object.type === "image" || object.type === "video" || object.type === "audio";
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
@@ -259,6 +264,10 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   addObject: (type, overrides) =>
     set((state) => {
+      if (type === "audio" && hasSpreadAudioConflict(state.document, state.selectedPageId)) {
+        return {};
+      }
+
       const object = { ...createObject(type), ...overrides } as PageObject;
 
       return {

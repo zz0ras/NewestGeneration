@@ -8,9 +8,10 @@ function readString(value: unknown): string | undefined {
 }
 
 function toMediaType(value: unknown): MediaAsset["type"] | null {
-  if (value === "image" || value === "video") return value;
+  if (value === "image" || value === "video" || value === "audio") return value;
   if (typeof value === "string" && value.startsWith("image/")) return "image";
   if (typeof value === "string" && value.startsWith("video/")) return "video";
+  if (typeof value === "string" && value.startsWith("audio/")) return "audio";
   return null;
 }
 

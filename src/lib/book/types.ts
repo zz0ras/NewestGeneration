@@ -1,4 +1,4 @@
-export type ObjectTemplateType = "text" | "image" | "shape" | "video";
+export type ObjectTemplateType = "text" | "image" | "shape" | "video" | "audio";
 export type TextAlign = "left" | "center" | "right";
 export type MediaFit = "cover" | "contain";
 export type FontSourceType = "preset" | "upload";
@@ -48,7 +48,14 @@ export interface VideoObject extends BaseMediaObject {
   type: "video";
 }
 
-export type PageObject = TextObject | ShapeObject | ImageObject | VideoObject;
+export interface AudioObject extends BasePageObject {
+  type: "audio";
+  src: string;
+  name?: string;
+  thumbnailSrc?: string;
+}
+
+export type PageObject = TextObject | ShapeObject | ImageObject | VideoObject | AudioObject;
 
 export interface BookPage {
   id: string;
@@ -68,7 +75,7 @@ export interface MediaFolderSource {
 
 export interface MediaAsset {
   id: string;
-  type: "image" | "video";
+  type: "image" | "video" | "audio";
   name: string;
   src: string;
   thumbnailSrc?: string;

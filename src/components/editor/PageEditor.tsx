@@ -25,7 +25,7 @@ const BookCanvas = dynamic(() => import("./BookCanvas").then((module) => module.
 });
 
 export function PageEditor() {
-  const [mediaIntent, setMediaIntent] = useState<"image" | "video" | null>(null);
+  const [mediaIntent, setMediaIntent] = useState<"image" | "video" | "audio" | null>(null);
   const [isInspectorPinnedOpen, setIsInspectorPinnedOpen] = useState(false);
   const [isMediaPanelOpen, setIsMediaPanelOpen] = useState(false);
 

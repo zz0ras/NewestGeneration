@@ -47,7 +47,7 @@ export function FloatingContextMenu() {
         </button>
       ) : null}
 
-      {selectedObject.type === "image" || selectedObject.type === "video" ? (
+      {selectedObject.type === "image" || selectedObject.type === "video" || selectedObject.type === "audio" ? (
         <button className="rounded-md p-1.5 transition-colors" style={{ color: "#d4bc9a" }} title="Thay media trong inspector">
           <Replace size={15} />
         </button>

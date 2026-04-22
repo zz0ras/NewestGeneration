@@ -1,20 +1,21 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Check, FolderOpen, FolderPlus, Image as ImageIcon, RefreshCw, Trash2, Video, X } from "lucide-react";
+import { Check, FolderOpen, FolderPlus, Image as ImageIcon, RefreshCw, Trash2, Video, Volume2, X } from "lucide-react";
 import type { MediaAsset, PageObject } from "@/lib/book/types";
+import { hasSpreadAudioConflict } from "@/lib/book/spread-audio";
 import { fetchGoogleDriveFolderAssets, parseGoogleDriveFolderId } from "@/lib/media/google-drive";
-import { useActiveMediaFolder, useEditorStore, useSelectedObject } from "@/stores/editor-store";
+import { useActiveMediaFolder, useEditorStore, useSelectedObject, useSelectedPage } from "@/stores/editor-store";
 
 interface MediaPanelProps {
   isOpen: boolean;
-  mediaIntent: "image" | "video" | null;
+  mediaIntent: "image" | "video" | "audio" | null;
   onClearMediaIntent: () => void;
   onClose: () => void;
 }
 
-function isMediaObject(object: PageObject | null): object is Extract<PageObject, { type: "image" | "video" }> {
-  return object?.type === "image" || object?.type === "video";
+function isMediaObject(object: PageObject | null): object is Extract<PageObject, { type: "image" | "video" | "audio" }> {
+  return object?.type === "image" || object?.type === "video" || object?.type === "audio";
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
@@ -42,6 +43,7 @@ function Input({
 }
 
 export function MediaPanel({ isOpen, mediaIntent, onClearMediaIntent, onClose }: MediaPanelProps) {
+  const selectedPage = useSelectedPage();
   const selectedObject = useSelectedObject();
   const activeMediaFolder = useActiveMediaFolder();
   const { document, addMediaFolder, removeMediaFolder, setActiveMediaFolder, replaceSelectedMediaSource, addObject } =
@@ -52,6 +54,7 @@ export function MediaPanel({ isOpen, mediaIntent, onClearMediaIntent, onClose }:
   const [folderError, setFolderError] = useState<string | null>(null);
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [mediaError, setMediaError] = useState<string | null>(null);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
   const [isLoadingAssets, setIsLoadingAssets] = useState(false);
   const [refreshSeed, setRefreshSeed] = useState(0);
   const [loadedFolderId, setLoadedFolderId] = useState<string | null>(null);
@@ -66,6 +69,7 @@ export function MediaPanel({ isOpen, mediaIntent, onClearMediaIntent, onClose }:
 
       setIsLoadingAssets(true);
       setMediaError(null);
+      setSelectionError(null);
 
       try {
         const assets = await fetchGoogleDriveFolderAssets(activeMediaFolder.folderId);
@@ -101,11 +105,15 @@ export function MediaPanel({ isOpen, mediaIntent, onClearMediaIntent, onClose }:
   const panelTitle = mediaIntent
     ? mediaIntent === "image"
       ? "Them anh"
-      : "Them video"
+      : mediaIntent === "video"
+        ? "Them video"
+        : "Them audio"
     : isMediaObject(selectedObject)
       ? selectedObject.type === "image"
         ? "Thu vien anh"
-        : "Thu vien video"
+        : selectedObject.type === "video"
+          ? "Thu vien video"
+          : "Thu vien audio"
       : "Media Library";
 
   const visibleMediaAssets =
@@ -132,6 +140,16 @@ export function MediaPanel({ isOpen, mediaIntent, onClearMediaIntent, onClose }:
   };
 
   const handleMediaAssetSelect = (asset: MediaAsset) => {
+    setSelectionError(null);
+
+    const isReplacingSelectedAudio = isMediaObject(selectedObject) && selectedObject.type === "audio" && asset.type === "audio";
+    const isAddingAudio = asset.type === "audio" && !isReplacingSelectedAudio;
+
+    if (isAddingAudio && selectedPage && hasSpreadAudioConflict(document, selectedPage.id)) {
+      setSelectionError("Spread hien tai da co audio. Moi spread chi duoc phep co toi da 1 audio.");
+      return;
+    }
+
     if (mediaIntent) {
       addObject(asset.type, {
         src: asset.src,
@@ -238,7 +256,7 @@ export function MediaPanel({ isOpen, mediaIntent, onClearMediaIntent, onClose }:
               <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">Asset Browser</div>
               <div className="mt-2 text-xs text-latte/70">
                 {mediaIntent
-                  ? `Chon mot ${mediaIntent === "image" ? "anh" : "video"} tu thu vien de them vao trang hien tai.`
+                  ? `Chon mot ${mediaIntent === "image" ? "anh" : mediaIntent === "video" ? "video" : "audio"} tu thu vien de them vao trang hien tai.`
                   : isMediaObject(selectedObject)
                     ? "Chon asset de thay media hien tai hoac them moi."
                     : "Chon folder active de duyet media va them object vao editor."}
@@ -273,6 +291,7 @@ export function MediaPanel({ isOpen, mediaIntent, onClearMediaIntent, onClose }:
 
           {visibleLoading ? <div className="text-sm text-latte/70">Dang tai assets...</div> : null}
           {visibleMediaError ? <div className="text-sm text-red-300">{visibleMediaError}</div> : null}
+          {selectionError ? <div className="text-sm text-red-300">{selectionError}</div> : null}
 
           {!visibleLoading && !visibleMediaError && visibleMediaAssets.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-[rgba(196,168,130,0.16)] px-4 py-4 text-sm text-latte/65">
@@ -289,7 +308,7 @@ export function MediaPanel({ isOpen, mediaIntent, onClearMediaIntent, onClose }:
                 className="flex w-full items-center gap-3 rounded-2xl border border-[rgba(196,168,130,0.12)] bg-[rgba(250,245,239,0.04)] px-3 py-3 text-left transition hover:border-[rgba(196,168,130,0.3)] hover:bg-[rgba(250,245,239,0.08)]"
               >
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[rgba(196,168,130,0.12)] text-accent">
-                  {asset.type === "image" ? <ImageIcon size={18} /> : <Video size={18} />}
+                  {asset.type === "image" ? <ImageIcon size={18} /> : asset.type === "video" ? <Video size={18} /> : <Volume2 size={18} />}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-cream">{asset.name}</div>

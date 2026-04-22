@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Image as KonvaImage, Layer, Rect, Stage, Text as KonvaText, Transformer } from "react-konva";
 import type Konva from "konva";
 import useImage from "use-image";
-import type { BookPage, ImageObject, PageObject, ShapeObject, TextObject, VideoObject } from "@/lib/book/types";
+import type { AudioObject, BookPage, ImageObject, PageObject, ShapeObject, TextObject, VideoObject } from "@/lib/book/types";
 import { useEditorStore, useSelectedObject, useSelectedPage } from "@/stores/editor-store";
 
 interface ObjectNodeProps {
@@ -49,6 +49,10 @@ function isImageObject(object: PageObject): object is ImageObject {
 
 function isVideoObject(object: PageObject): object is VideoObject {
   return object.type === "video";
+}
+
+function isAudioObject(object: PageObject): object is AudioObject {
+  return object.type === "audio";
 }
 
 function ObjectNode({ object, isSelected, isEditing, onSelect, onStartTextEdit, onChange, onRegisterNode }: ObjectNodeProps) {
@@ -182,6 +186,23 @@ function ObjectNode({ object, isSelected, isEditing, onSelect, onStartTextEdit, 
           <Rect width={object.width} height={object.height} cornerRadius={16} fill="rgba(18, 12, 9, 0.35)" />
           <KonvaText x={18} y={18} width={object.width - 36} text="VIDEO" fontSize={13} letterSpacing={2} fill="#d4bc9a" fontStyle="bold" />
           <KonvaText x={18} y={object.height / 2 - 10} width={object.width - 36} text={object.name ?? "Video placeholder"} fontSize={18} fill="#faf5ef" align="center" />
+        </Group>
+      ) : null}
+
+      {isAudioObject(object) ? (
+        <Group
+          ref={(node) => {
+            shapeRef.current = node;
+          }}
+          {...commonProps}
+        >
+          <Rect width={object.width} height={object.height} cornerRadius={20} fill="#2d221b" stroke="rgba(196, 168, 130, 0.28)" strokeWidth={1} />
+          <Rect x={10} y={10} width={object.width - 20} height={object.height - 20} cornerRadius={14} fill="rgba(250, 245, 239, 0.06)" />
+          <Rect x={24} y={object.height / 2 - 14} width={28} height={28} cornerRadius={14} fill="#c4a882" opacity={0.9} />
+          <KonvaText x={24} y={object.height / 2 - 7} width={28} align="center" text="♪" fontSize={16} fill="#1a1410" fontStyle="bold" />
+          <KonvaText x={68} y={22} width={object.width - 92} text="AUDIO" fontSize={12} letterSpacing={2} fill="#d4bc9a" fontStyle="bold" />
+          <KonvaText x={68} y={42} width={object.width - 92} text={object.name ?? "Audio track"} fontSize={16} fill="#faf5ef" />
+          <KonvaText x={68} y={64} width={object.width - 92} text={object.src} fontSize={10} fill="rgba(250,245,239,0.58)" ellipsis />
         </Group>
       ) : null}
 
