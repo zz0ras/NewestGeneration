@@ -58,6 +58,8 @@ const FlipBookComponent = HTMLFlipBook as unknown as React.ForwardRefExoticCompo
   FlipBookProps & React.RefAttributes<FlipBookHandle>
 >;
 
+const VIEWER_SCALE_RATIO = 0.85;
+
 function extractPageIndex(eventData: number | FlipBookEventData): number {
   if (typeof eventData === "number") return eventData;
   if (typeof eventData.page === "number") return eventData.page;
@@ -320,7 +322,7 @@ export function BookViewer({ document }: { document: BookDocument }) {
   const stageHeight = Math.max(stageSize.height, 1);
   const availablePerPage = stageWidth / 2;
   const fitScale = Math.min(availablePerPage / document.pageSize.width, stageHeight / document.pageSize.height);
-  const safeScale = Number.isFinite(fitScale) && fitScale > 0 ? fitScale : 0.1;
+  const safeScale = Number.isFinite(fitScale) && fitScale > 0 ? fitScale * VIEWER_SCALE_RATIO : 0.1;
   const renderW = Math.max(1, Math.floor(document.pageSize.width * safeScale));
   const renderH = Math.max(1, Math.floor(document.pageSize.height * safeScale));
 
