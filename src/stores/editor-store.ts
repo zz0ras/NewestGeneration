@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { nanoid } from "nanoid";
 import { sampleBookDocument } from "@/lib/book/seed";
 import {
   createAudioObject,
@@ -28,6 +29,16 @@ import type {
   TextObject,
   VideoObject,
 } from "@/lib/book/types";
+import {
+  deleteDocument,
+  getDocument,
+  getMeta,
+  listDocuments,
+  saveDocument,
+  setMeta,
+  type LocalDocumentIndexItem,
+  type LocalEditorUiState,
+} from "@/lib/persistence/editor-local";
 
 interface HistoryState {
   past: BookDocument[];
@@ -43,6 +54,14 @@ interface AddMediaFolderInput {
 interface EditorState {
   document: BookDocument;
   history: HistoryState;
+  documentsIndex: LocalDocumentIndexItem[];
+  activeDocumentId: string;
+  persistence: {
+    status: "idle" | "saving" | "saved" | "error";
+    lastSavedAt: string | null;
+    errorMessage: string | null;
+  };
+  isHydrated: boolean;
   selectedPageId: string;
   selectedObjectId: string | null;
   editingTextObjectId: string | null;
@@ -79,6 +98,17 @@ interface EditorState {
   setActiveMediaFolder: (folderId: string | null) => void;
 
   addFontAsset: (fontAsset: DocumentFontAsset) => void;
+  setSelectionState: (input: { pageId: string | null; objectId: string | null }) => void;
+
+  hydrateFromLocal: () => Promise<void>;
+  createDocumentLocal: () => Promise<void>;
+  switchDocumentLocal: (id: string) => Promise<void>;
+  renameDocumentLocal: (id: string, title: string) => Promise<void>;
+  deleteDocumentLocal: (id: string) => Promise<void>;
+  refreshDocumentsIndex: () => Promise<void>;
+  setPersistenceStatus: (status: EditorState["persistence"]["status"]) => void;
+  markPersistenceSaved: (savedAt: string) => void;
+  markPersistenceError: (message: string) => void;
 }
 
 function createObject(type: ObjectTemplateType): PageObject {
@@ -140,9 +170,63 @@ function isMediaObject(object: PageObject): object is ImageObject | VideoObject 
   return object.type === "image" || object.type === "video" || object.type === "audio";
 }
 
+const ACTIVE_DOCUMENT_ID_META_KEY = "activeDocumentId";
+const UI_META_PREFIX = "ui:";
+
+function createDocumentFromSeed(): BookDocument {
+  const now = new Date().toISOString();
+  const pages = sampleBookDocument.pages.map((page, index) => ({
+    ...page,
+    id: nanoid(),
+    side: index % 2 === 0 ? "right" : "left",
+    objects: page.objects.map((object) => ({ ...object, id: nanoid() })),
+  }));
+
+  return {
+    ...sampleBookDocument,
+    id: nanoid(),
+    title: "Untitled document",
+    updatedAt: now,
+    pages,
+    mediaFolders: [],
+    activeMediaFolderId: null,
+    fontAssets: [],
+  };
+}
+
+function normalizeSelectionState(
+  document: BookDocument,
+  input: { pageId: string | null; objectId: string | null },
+): { pageId: string; objectId: string | null } {
+  const fallbackPageId = document.pages[0]?.id ?? "";
+  const selectedPageId =
+    input.pageId && document.pages.some((page) => page.id === input.pageId) ? input.pageId : fallbackPageId;
+
+  const selectedPage = document.pages.find((page) => page.id === selectedPageId);
+  const selectedObjectId =
+    input.objectId && selectedPage?.objects.some((object) => object.id === input.objectId) ? input.objectId : null;
+
+  return {
+    pageId: selectedPageId,
+    objectId: selectedObjectId,
+  };
+}
+
+function getUiMetaKey(documentId: string): string {
+  return `${UI_META_PREFIX}${documentId}`;
+}
+
 export const useEditorStore = create<EditorState>((set) => ({
   document: sampleBookDocument,
   history: { past: [], future: [] },
+  documentsIndex: [],
+  activeDocumentId: sampleBookDocument.id,
+  persistence: {
+    status: "idle",
+    lastSavedAt: null,
+    errorMessage: null,
+  },
+  isHydrated: false,
   selectedPageId: sampleBookDocument.pages[0]?.id ?? "",
   selectedObjectId: null,
   editingTextObjectId: null,
@@ -155,6 +239,15 @@ export const useEditorStore = create<EditorState>((set) => ({
     editingTextObjectId: null,
   })),
   selectObject: (objectId) => set({ selectedObjectId: objectId, editingTextObjectId: null }),
+  setSelectionState: (input) =>
+    set((state) => {
+      const normalized = normalizeSelectionState(state.document, input);
+      return {
+        selectedPageId: normalized.pageId,
+        selectedObjectId: normalized.objectId,
+        editingTextObjectId: null,
+      };
+    }),
 
   startTextEditing: (pageId, objectId) =>
     set({ selectedPageId: pageId, selectedObjectId: objectId, editingTextObjectId: objectId }),
@@ -408,6 +501,210 @@ export const useEditorStore = create<EditorState>((set) => ({
         fontAssets: [...doc.fontAssets, fontAsset],
       }));
     }),
+
+  refreshDocumentsIndex: async () => {
+    const index = await listDocuments();
+    set({ documentsIndex: index });
+  },
+
+  hydrateFromLocal: async () => {
+    try {
+      let index = await listDocuments();
+
+      if (index.length === 0) {
+        const document = createDocumentFromSeed();
+        await saveDocument({
+          id: document.id,
+          title: document.title,
+          content: document,
+          updatedAt: document.updatedAt,
+        });
+        await setMeta(ACTIVE_DOCUMENT_ID_META_KEY, document.id);
+        await setMeta<LocalEditorUiState>(getUiMetaKey(document.id), {
+          mode: "design",
+          selectedPageId: document.pages[0]?.id ?? null,
+          selectedObjectId: null,
+        });
+        index = await listDocuments();
+      }
+
+      const savedActiveDocumentId = await getMeta<string>(ACTIVE_DOCUMENT_ID_META_KEY);
+      const fallbackDocumentId = index[0]?.id ?? "";
+      const nextActiveDocumentId =
+        savedActiveDocumentId && index.some((entry) => entry.id === savedActiveDocumentId)
+          ? savedActiveDocumentId
+          : fallbackDocumentId;
+
+      const activeRecord = (await getDocument(nextActiveDocumentId)) ?? (await getDocument(fallbackDocumentId));
+      if (!activeRecord) {
+        set({ isHydrated: true, documentsIndex: index });
+        return;
+      }
+
+      await setMeta(ACTIVE_DOCUMENT_ID_META_KEY, activeRecord.id);
+      const persistedUiState = await getMeta<LocalEditorUiState>(getUiMetaKey(activeRecord.id));
+      const normalizedSelection = normalizeSelectionState(activeRecord.content, {
+        pageId: persistedUiState?.selectedPageId ?? activeRecord.content.pages[0]?.id ?? null,
+        objectId: persistedUiState?.selectedObjectId ?? null,
+      });
+
+      set({
+        document: activeRecord.content,
+        history: { past: [], future: [] },
+        documentsIndex: index,
+        activeDocumentId: activeRecord.id,
+        mode: persistedUiState?.mode ?? "design",
+        selectedPageId: normalizedSelection.pageId,
+        selectedObjectId: normalizedSelection.objectId,
+        editingTextObjectId: null,
+        isHydrated: true,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Cannot load local data";
+      set((state) => ({
+        isHydrated: true,
+        persistence: {
+          ...state.persistence,
+          status: "error",
+          errorMessage: message,
+        },
+      }));
+    }
+  },
+
+  createDocumentLocal: async () => {
+    const nextDocument = createDocumentFromSeed();
+    await saveDocument({
+      id: nextDocument.id,
+      title: nextDocument.title,
+      content: nextDocument,
+      updatedAt: nextDocument.updatedAt,
+    });
+    await setMeta(ACTIVE_DOCUMENT_ID_META_KEY, nextDocument.id);
+    await setMeta<LocalEditorUiState>(getUiMetaKey(nextDocument.id), {
+      mode: "design",
+      selectedPageId: nextDocument.pages[0]?.id ?? null,
+      selectedObjectId: null,
+    });
+
+    const index = await listDocuments();
+    set({
+      document: nextDocument,
+      history: { past: [], future: [] },
+      documentsIndex: index,
+      activeDocumentId: nextDocument.id,
+      mode: "design",
+      selectedPageId: nextDocument.pages[0]?.id ?? "",
+      selectedObjectId: null,
+      editingTextObjectId: null,
+    });
+  },
+
+  switchDocumentLocal: async (id) => {
+    const record = await getDocument(id);
+    if (!record) return;
+
+    await setMeta(ACTIVE_DOCUMENT_ID_META_KEY, id);
+    const persistedUiState = await getMeta<LocalEditorUiState>(getUiMetaKey(id));
+    const normalizedSelection = normalizeSelectionState(record.content, {
+      pageId: persistedUiState?.selectedPageId ?? record.content.pages[0]?.id ?? null,
+      objectId: persistedUiState?.selectedObjectId ?? null,
+    });
+
+    set({
+      document: record.content,
+      history: { past: [], future: [] },
+      activeDocumentId: id,
+      mode: persistedUiState?.mode ?? "design",
+      selectedPageId: normalizedSelection.pageId,
+      selectedObjectId: normalizedSelection.objectId,
+      editingTextObjectId: null,
+    });
+  },
+
+  renameDocumentLocal: async (id, title) => {
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle) return;
+
+    const record = await getDocument(id);
+    if (!record) return;
+
+    const updatedAt = new Date().toISOString();
+    const updatedContent: BookDocument = {
+      ...record.content,
+      title: normalizedTitle,
+      updatedAt,
+    };
+    await saveDocument({
+      id,
+      title: normalizedTitle,
+      content: updatedContent,
+      updatedAt,
+    });
+
+    const index = await listDocuments();
+    set((state) => ({
+      documentsIndex: index,
+      ...(state.activeDocumentId === id
+        ? {
+            document: updatedContent,
+          }
+        : {}),
+    }));
+  },
+
+  deleteDocumentLocal: async (id) => {
+    const currentIndex = await listDocuments();
+    if (currentIndex.length <= 1) return;
+
+    await deleteDocument(id);
+    const nextIndex = await listDocuments();
+
+    set((state) => {
+      const deletingActive = state.activeDocumentId === id;
+      if (!deletingActive) {
+        return { documentsIndex: nextIndex };
+      }
+
+      return { documentsIndex: nextIndex };
+    });
+
+    const state = useEditorStore.getState();
+    if (state.activeDocumentId !== id) return;
+
+    const fallbackDocumentId = nextIndex[0]?.id;
+    if (!fallbackDocumentId) return;
+
+    await state.switchDocumentLocal(fallbackDocumentId);
+  },
+
+  setPersistenceStatus: (status) =>
+    set((state) => ({
+      persistence: {
+        ...state.persistence,
+        status,
+        errorMessage: status === "error" ? state.persistence.errorMessage : null,
+      },
+    })),
+
+  markPersistenceSaved: (savedAt) =>
+    set((state) => ({
+      persistence: {
+        ...state.persistence,
+        status: "saved",
+        lastSavedAt: savedAt,
+        errorMessage: null,
+      },
+    })),
+
+  markPersistenceError: (message) =>
+    set((state) => ({
+      persistence: {
+        ...state.persistence,
+        status: "error",
+        errorMessage: message,
+      },
+    })),
 }));
 
 export function useSelectedPage() {
