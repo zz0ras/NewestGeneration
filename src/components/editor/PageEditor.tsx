@@ -128,13 +128,24 @@ export function PageEditor() {
 
           {isInspectorPinnedOpen ? (
             <div className="absolute inset-y-3 right-3 z-50 w-[min(360px,calc(100%-24px))] xl:hidden">
-              <EditorInspector onRequestClose={() => setIsInspectorPinnedOpen(false)} />
+              <EditorInspector
+                onRequestClose={() => setIsInspectorPinnedOpen(false)}
+                onRequestAudioLibrary={() => {
+                  setMediaIntent("audio");
+                  setIsMediaPanelOpen(true);
+                }}
+              />
             </div>
           ) : null}
         </div>
 
         <div className="hidden h-full w-[340px] shrink-0 xl:block">
-          <EditorInspector />
+          <EditorInspector
+            onRequestAudioLibrary={() => {
+              setMediaIntent("audio");
+              setIsMediaPanelOpen(true);
+            }}
+          />
         </div>
       </div>
 

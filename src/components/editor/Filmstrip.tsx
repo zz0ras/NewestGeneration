@@ -5,7 +5,7 @@ import type { DragEndEvent } from "@dnd-kit/core";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Copy, Plus, Trash } from "lucide-react";
+import { Copy, Plus, Trash, Volume2 } from "lucide-react";
 import type { BookPage } from "@/lib/book/types";
 import { useEditorStore } from "@/stores/editor-store";
 
@@ -13,6 +13,7 @@ function SortablePageItem({ page, index, total }: { page: BookPage; index: numbe
   const { selectedPageId, selectPage, duplicatePage, deletePage } = useEditorStore();
   const isSelected = selectedPageId === page.id;
   const isLeft = index % 2 === 0;
+  const hasAudio = page.objects.some((object) => object.type === "audio");
 
   let label = `${index + 1}`;
   if (total) {
@@ -42,6 +43,20 @@ function SortablePageItem({ page, index, total }: { page: BookPage; index: numbe
         {...attributes}
         {...listeners}
       >
+        {hasAudio ? (
+          <div
+            className="absolute right-1.5 top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full"
+            style={{
+              background: "rgba(30, 25, 20, 0.88)",
+              border: "1px solid rgba(196, 168, 130, 0.35)",
+              color: "#c4a882",
+              boxShadow: "0 3px 8px rgba(0,0,0,0.24)",
+            }}
+            title="Trang nay co audio"
+          >
+            <Volume2 size={11} />
+          </div>
+        ) : null}
         <div className="flex h-full flex-col justify-between p-2">
           <div className="truncate text-[6px] font-medium" style={{ color: "#5c4a36" }}>
             {page.name}

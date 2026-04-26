@@ -1,6 +1,6 @@
 export type ObjectTemplateType = "text" | "image" | "shape" | "video" | "audio";
 export type TextAlign = "left" | "center" | "right";
-export type MediaFit = "cover" | "contain";
+export type MediaFit = "cover" | "contain" | "stretch";
 export type FontSourceType = "preset" | "upload";
 
 interface BasePageObject {

@@ -7,6 +7,7 @@ import useImage from "use-image";
 import type { AudioObject, BookPage, ImageObject, PageObject, ShapeObject, TextObject, VideoObject } from "@/lib/book/types";
 import { useEditorStore, useSelectedObject, useSelectedPage } from "@/stores/editor-store";
 import { getBookPageLayout } from "@/components/shared/book-page-layout";
+import { getMediaRenderLayout } from "@/lib/media/object-fit";
 
 interface ObjectNodeProps {
   object: PageObject;
@@ -114,6 +115,26 @@ function ObjectNode({ object, isSelected, isEditing, onSelect, onStartTextEdit, 
     onTransformEnd: handleTransformEnd,
   };
 
+  const renderImage = (opacity = 1) => {
+    if (!image || (!isImageObject(object) && !isVideoObject(object))) return null;
+
+    const layout = getMediaRenderLayout(image.width, image.height, object.width, object.height, object.fit);
+    return (
+      <KonvaImage
+        image={image}
+        x={layout.drawX}
+        y={layout.drawY}
+        width={layout.drawWidth}
+        height={layout.drawHeight}
+        cropX={layout.cropX}
+        cropY={layout.cropY}
+        cropWidth={layout.cropWidth}
+        cropHeight={layout.cropHeight}
+        opacity={opacity}
+      />
+    );
+  };
+
   return (
     <>
       {isShapeObject(object) ? (
@@ -164,15 +185,17 @@ function ObjectNode({ object, isSelected, isEditing, onSelect, onStartTextEdit, 
       ) : null}
 
       {isImageObject(object) ? (
-        <KonvaImage
+        <Group
           ref={(node) => {
             shapeRef.current = node;
           }}
           {...commonProps}
           width={object.width}
           height={object.height}
-          image={image ?? undefined}
-        />
+        >
+          <Rect width={object.width} height={object.height} fill="rgba(0,0,0,0)" />
+          {renderImage()}
+        </Group>
       ) : null}
 
       {isVideoObject(object) ? (
@@ -181,9 +204,11 @@ function ObjectNode({ object, isSelected, isEditing, onSelect, onStartTextEdit, 
             shapeRef.current = node;
           }}
           {...commonProps}
+          width={object.width}
+          height={object.height}
         >
           <Rect width={object.width} height={object.height} cornerRadius={16} fill="#2b2119" stroke="rgba(196, 168, 130, 0.25)" strokeWidth={1} />
-          {image ? <KonvaImage image={image} width={object.width} height={object.height} cornerRadius={16} opacity={0.72} /> : null}
+          {renderImage(0.72)}
           <Rect width={object.width} height={object.height} cornerRadius={16} fill="rgba(18, 12, 9, 0.35)" />
           <KonvaText x={18} y={18} width={object.width - 36} text="VIDEO" fontSize={13} letterSpacing={2} fill="#d4bc9a" fontStyle="bold" />
           <KonvaText x={18} y={object.height / 2 - 10} width={object.width - 36} text={object.name ?? "Video placeholder"} fontSize={18} fill="#faf5ef" align="center" />

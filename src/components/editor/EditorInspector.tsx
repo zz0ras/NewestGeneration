@@ -1,14 +1,15 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Maximize2, Type, Upload } from "lucide-react";
+import { Maximize2, Music2, Type, Upload } from "lucide-react";
 import { PRESET_FONT_ASSETS } from "@/lib/fonts/presets";
 import { createUploadedFontAsset } from "@/lib/fonts/upload";
-import type { PageObject, TextAlign, TextObject } from "@/lib/book/types";
+import type { AudioObject, PageObject, TextAlign, TextObject } from "@/lib/book/types";
 import { useEditorStore, useSelectedObject, useSelectedPage } from "@/stores/editor-store";
 
 interface EditorInspectorProps {
   onRequestClose?: () => void;
+  onRequestAudioLibrary?: () => void;
 }
 
 const ALIGN_OPTIONS: TextAlign[] = ["left", "center", "right"];
@@ -23,6 +24,10 @@ function isMediaObject(object: PageObject | null): object is Extract<PageObject,
 
 function isVisualMediaObject(object: PageObject | null): object is Extract<PageObject, { type: "image" | "video" }> {
   return object?.type === "image" || object?.type === "video";
+}
+
+function isAudioObject(object: PageObject): object is AudioObject {
+  return object.type === "audio";
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -78,14 +83,15 @@ function NumberInput({
   return <Input type="number" value={value} min={min} onChange={(value) => onChange(Number(value) || 0)} />;
 }
 
-export function EditorInspector({ onRequestClose }: EditorInspectorProps) {
+export function EditorInspector({ onRequestClose, onRequestAudioLibrary }: EditorInspectorProps) {
   const selectedPage = useSelectedPage();
   const selectedObject = useSelectedObject();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { document, updateObject, updateTextObjectStyle, deleteObject, addFontAsset } = useEditorStore();
+  const { document, updateObject, updateTextObjectStyle, deleteObject, addFontAsset, selectObject } = useEditorStore();
   const [fontError, setFontError] = useState<string | null>(null);
 
   const inspectorTitle = selectedObject ? `Dang chon ${selectedObject.type}` : "Editor Inspector";
+  const pageAudio = selectedPage?.objects.find(isAudioObject) ?? null;
 
   const handleTransformChange = (field: "x" | "y" | "width" | "height" | "rotation", value: number) => {
     if (!selectedPage || !selectedObject) return;
@@ -107,8 +113,15 @@ export function EditorInspector({ onRequestClose }: EditorInspectorProps) {
       width: document.pageSize.width,
       height: document.pageSize.height,
       rotation: 0,
-      fit: "cover",
+      fit: "contain",
     });
+  };
+
+  const handleOpenPageAudio = () => {
+    if (pageAudio) {
+      selectObject(pageAudio.id);
+    }
+    onRequestAudioLibrary?.();
   };
 
   const handleFontUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -348,8 +361,8 @@ export function EditorInspector({ onRequestClose }: EditorInspectorProps) {
                 </button>
                 <div>
                   <FieldLabel>Render mode</FieldLabel>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(["cover", "contain"] as const).map((fit) => (
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["contain", "cover", "stretch"] as const).map((fit) => (
                       <button
                         key={fit}
                         type="button"
@@ -362,6 +375,52 @@ export function EditorInspector({ onRequestClose }: EditorInspectorProps) {
                   </div>
                 </div>
               </>
+            ) : null}
+          </Section>
+        ) : null}
+
+        {selectedPage ? (
+          <Section title="Audio cua trang">
+            <div className="rounded-2xl bg-[rgba(250,245,239,0.04)] px-4 py-3 text-sm text-latte/80">
+              {pageAudio ? (
+                <>
+                  <div className="flex items-center gap-2 font-medium text-cream">
+                    <Music2 size={15} className="text-accent" />
+                    <span className="truncate">{pageAudio.name || "Audio track"}</span>
+                  </div>
+                  <div className="mt-1 break-all text-xs text-latte/60">{pageAudio.src}</div>
+                </>
+              ) : (
+                <div className="text-latte/65">Trang nay chua co audio.</div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleOpenPageAudio}
+                className="rounded-xl border border-[rgba(196,168,130,0.24)] bg-[rgba(196,168,130,0.14)] px-3 py-2 text-sm font-medium text-cream transition hover:border-[rgba(196,168,130,0.4)] hover:bg-[rgba(196,168,130,0.2)]"
+              >
+                {pageAudio ? "Doi audio" : "Them audio"}
+              </button>
+              <button
+                type="button"
+                disabled={!pageAudio}
+                onClick={() => pageAudio && deleteObject(selectedPage.id, pageAudio.id)}
+                className="rounded-xl border border-[rgba(204,123,123,0.24)] bg-[rgba(204,123,123,0.08)] px-3 py-2 text-sm font-medium text-red-200 transition hover:border-[rgba(204,123,123,0.4)] hover:bg-[rgba(204,123,123,0.14)] disabled:pointer-events-none disabled:opacity-35"
+              >
+                Xoa audio
+              </button>
+            </div>
+
+            {pageAudio ? (
+              <button
+                type="button"
+                onClick={() => selectObject(pageAudio.id)}
+                className="w-full rounded-xl border border-[rgba(196,168,130,0.14)] bg-[rgba(250,245,239,0.04)] px-3 py-2 text-sm text-latte/80 transition hover:border-[rgba(196,168,130,0.3)] hover:text-cream"
+              >
+                Chon audio tren canvas
+              </button>
             ) : null}
           </Section>
         ) : null}

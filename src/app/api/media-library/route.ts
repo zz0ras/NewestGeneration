@@ -24,9 +24,10 @@ function getMediaType(mimeType: string | undefined): MediaAsset["type"] | null {
   return null;
 }
 
-function getMediaFileUrl(fileId: string): string {
+function getMediaFileUrl(fileId: string, type: MediaAsset["type"]): string {
   const url = new URL("/api/media-library/file", "http://localhost");
   url.searchParams.set("id", fileId);
+  url.searchParams.set("type", type);
   return `${url.pathname}${url.search}`;
 }
 
@@ -40,7 +41,7 @@ function toMediaAsset(file: GoogleDriveFile): MediaAsset | null {
     id: file.id,
     type,
     name: file.name,
-    src: getMediaFileUrl(file.id),
+    src: getMediaFileUrl(file.id, type),
     thumbnailSrc: file.thumbnailLink,
   };
 }

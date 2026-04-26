@@ -46,7 +46,7 @@ export function MediaPanel({ isOpen, mediaIntent, onClearMediaIntent, onClose }:
   const selectedPage = useSelectedPage();
   const selectedObject = useSelectedObject();
   const activeMediaFolder = useActiveMediaFolder();
-  const { document, addMediaFolder, removeMediaFolder, setActiveMediaFolder, replaceSelectedMediaSource, addObject } =
+  const { document, addMediaFolder, removeMediaFolder, setActiveMediaFolder, replaceSelectedMediaSource, replacePageAudioSource, addObject } =
     useEditorStore();
 
   const [folderName, setFolderName] = useState("");
@@ -142,8 +142,15 @@ export function MediaPanel({ isOpen, mediaIntent, onClearMediaIntent, onClose }:
   const handleMediaAssetSelect = (asset: MediaAsset) => {
     setSelectionError(null);
 
+    const pageAudioObject = selectedPage?.objects.find((object) => object.type === "audio") ?? null;
     const isReplacingSelectedAudio = isMediaObject(selectedObject) && selectedObject.type === "audio" && asset.type === "audio";
     const isAddingAudio = asset.type === "audio" && !isReplacingSelectedAudio;
+
+    if (mediaIntent === "audio" && asset.type === "audio" && selectedPage && pageAudioObject) {
+      replacePageAudioSource(selectedPage.id, pageAudioObject.id, asset);
+      onClearMediaIntent();
+      return;
+    }
 
     if (isAddingAudio && selectedPage && hasSpreadAudioConflict(document, selectedPage.id)) {
       setSelectionError("Spread hien tai da co audio. Moi spread chi duoc phep co toi da 1 audio.");
@@ -155,6 +162,7 @@ export function MediaPanel({ isOpen, mediaIntent, onClearMediaIntent, onClose }:
         src: asset.src,
         name: asset.name,
         thumbnailSrc: asset.thumbnailSrc,
+        ...(asset.type === "image" || asset.type === "video" ? { fit: "contain" as const } : {}),
       });
       onClearMediaIntent();
       return;
@@ -169,6 +177,7 @@ export function MediaPanel({ isOpen, mediaIntent, onClearMediaIntent, onClose }:
       src: asset.src,
       name: asset.name,
       thumbnailSrc: asset.thumbnailSrc,
+      ...(asset.type === "image" || asset.type === "video" ? { fit: "contain" as const } : {}),
     });
   };
 

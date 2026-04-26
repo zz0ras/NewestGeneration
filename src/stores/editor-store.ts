@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { nanoid } from "nanoid";
-import { sampleBookDocument } from "@/lib/book/seed";
+import { DEFAULT_PAGE_SIZE, sampleBookDocument } from "@/lib/book/seed";
 import {
   createAudioObject,
   clonePage,
@@ -92,6 +92,7 @@ interface EditorState {
   deleteObject: (pageId: string, objectId: string) => void;
   moveObjectLayer: (pageId: string, objectId: string, direction: "forward" | "backward") => void;
   replaceSelectedMediaSource: (asset: MediaAsset) => void;
+  replacePageAudioSource: (pageId: string, audioObjectId: string, asset: MediaAsset) => void;
 
   addMediaFolder: (input: AddMediaFolderInput) => void;
   removeMediaFolder: (folderId: string) => void;
@@ -172,10 +173,12 @@ function isMediaObject(object: PageObject): object is ImageObject | VideoObject 
 
 const ACTIVE_DOCUMENT_ID_META_KEY = "activeDocumentId";
 const UI_META_PREFIX = "ui:";
+const MEDIA_FIT_CONTAIN_MIGRATION_META_KEY = "mediaFitContainMigration:v1";
+const PAGE_SIZE_1024_1536_MIGRATION_META_KEY = "pageSize1024x1536Migration:v1";
 
 function createDocumentFromSeed(): BookDocument {
   const now = new Date().toISOString();
-  const pages = sampleBookDocument.pages.map((page, index) => ({
+  const pages: BookPage[] = sampleBookDocument.pages.map((page, index) => ({
     ...page,
     id: nanoid(),
     side: index % 2 === 0 ? "right" : "left",
@@ -214,6 +217,108 @@ function normalizeSelectionState(
 
 function getUiMetaKey(documentId: string): string {
   return `${UI_META_PREFIX}${documentId}`;
+}
+
+function migrateMediaFitToContain(document: BookDocument): { document: BookDocument; changed: boolean } {
+  let changed = false;
+  const pages = document.pages.map((page) => {
+    let pageChanged = false;
+    const objects = page.objects.map((object) => {
+      if ((object.type === "image" || object.type === "video") && object.fit === "cover") {
+        changed = true;
+        pageChanged = true;
+        return { ...object, fit: "contain" as const };
+      }
+
+      return object;
+    });
+
+    return pageChanged ? { ...page, objects } : page;
+  });
+
+  return changed ? { document: { ...document, pages }, changed } : { document, changed };
+}
+
+async function migrateStoredMediaFitToContain(index: LocalDocumentIndexItem[]): Promise<void> {
+  const hasMigrated = await getMeta<boolean>(MEDIA_FIT_CONTAIN_MIGRATION_META_KEY);
+  if (hasMigrated) return;
+
+  for (const item of index) {
+    const record = await getDocument(item.id);
+    if (!record) continue;
+
+    const migration = migrateMediaFitToContain(record.content);
+    if (!migration.changed) continue;
+
+    const updatedAt = new Date().toISOString();
+    await saveDocument({
+      id: record.id,
+      title: record.title,
+      content: {
+        ...migration.document,
+        updatedAt,
+      },
+      updatedAt,
+    });
+  }
+
+  await setMeta(MEDIA_FIT_CONTAIN_MIGRATION_META_KEY, true);
+}
+
+function migratePageSizeToDefault(document: BookDocument): { document: BookDocument; changed: boolean } {
+  if (document.pageSize.width === DEFAULT_PAGE_SIZE.width && document.pageSize.height === DEFAULT_PAGE_SIZE.height) {
+    return { document, changed: false };
+  }
+
+  const scaleX = DEFAULT_PAGE_SIZE.width / Math.max(document.pageSize.width, 1);
+  const scaleY = DEFAULT_PAGE_SIZE.height / Math.max(document.pageSize.height, 1);
+
+  return {
+    document: {
+      ...document,
+      pageSize: {
+        width: DEFAULT_PAGE_SIZE.width,
+        height: DEFAULT_PAGE_SIZE.height,
+      },
+      pages: document.pages.map((page) => ({
+        ...page,
+        objects: page.objects.map((object) => ({
+          ...object,
+          x: object.x * scaleX,
+          y: object.y * scaleY,
+          width: object.width * scaleX,
+          height: object.height * scaleY,
+        }) as PageObject),
+      })),
+    },
+    changed: true,
+  };
+}
+
+async function migrateStoredPageSizeToDefault(index: LocalDocumentIndexItem[]): Promise<void> {
+  const hasMigrated = await getMeta<boolean>(PAGE_SIZE_1024_1536_MIGRATION_META_KEY);
+  if (hasMigrated) return;
+
+  for (const item of index) {
+    const record = await getDocument(item.id);
+    if (!record) continue;
+
+    const migration = migratePageSizeToDefault(record.content);
+    if (!migration.changed) continue;
+
+    const updatedAt = new Date().toISOString();
+    await saveDocument({
+      id: record.id,
+      title: record.title,
+      content: {
+        ...migration.document,
+        updatedAt,
+      },
+      updatedAt,
+    });
+  }
+
+  await setMeta(PAGE_SIZE_1024_1536_MIGRATION_META_KEY, true);
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
@@ -447,10 +552,35 @@ export const useEditorStore = create<EditorState>((set) => ({
               src: asset.src,
               name: asset.name,
               thumbnailSrc: asset.thumbnailSrc,
+              ...(object.type === "image" || object.type === "video" ? { fit: "contain" as const } : {}),
             };
           }),
         ),
       );
+    }),
+
+  replacePageAudioSource: (pageId, audioObjectId, asset) =>
+    set((state) => {
+      if (asset.type !== "audio") return {};
+
+      return {
+        ...withHistory(state, (doc) =>
+          updatePageObjects(doc, pageId, (objects) =>
+            mapObject(objects, audioObjectId, (object) => {
+              if (object.type !== "audio") return object;
+              return {
+                ...object,
+                src: asset.src,
+                name: asset.name,
+                thumbnailSrc: asset.thumbnailSrc,
+              };
+            }),
+          ),
+        ),
+        selectedPageId: pageId,
+        selectedObjectId: audioObjectId,
+        editingTextObjectId: null,
+      };
     }),
 
   addMediaFolder: (input) =>
@@ -527,6 +657,10 @@ export const useEditorStore = create<EditorState>((set) => ({
         });
         index = await listDocuments();
       }
+
+      await migrateStoredMediaFitToContain(index);
+      await migrateStoredPageSizeToDefault(index);
+      index = await listDocuments();
 
       const savedActiveDocumentId = await getMeta<string>(ACTIVE_DOCUMENT_ID_META_KEY);
       const fallbackDocumentId = index[0]?.id ?? "";

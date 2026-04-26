@@ -1,11 +1,11 @@
 "use client";
 
-import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import HTMLFlipBook from "react-pageflip";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { findSpreadAudioObject } from "@/lib/book/spread-audio";
 import { useEditorStore } from "@/stores/editor-store";
-import type { BookDocument, PageObject } from "@/lib/book/types";
+import type { BookDocument, MediaFit, PageObject } from "@/lib/book/types";
 import { BOOK_PAGE_STAGE_PADDING, getBookPageLayout, getEditorComparableViewportSize } from "@/components/shared/book-page-layout";
 
 interface FlipBookHandle {
@@ -73,6 +73,10 @@ function extractPageIndex(eventData: number | FlipBookEventData): number {
   return 0;
 }
 
+function getCssObjectFit(fit: MediaFit): React.CSSProperties["objectFit"] {
+  return fit === "stretch" ? "fill" : fit;
+}
+
 function renderViewerObject(object: PageObject) {
   if (object.type === "shape") {
     return (
@@ -132,7 +136,7 @@ function renderViewerObject(object: PageObject) {
           top: object.y,
           width: object.width,
           height: object.height,
-          objectFit: object.fit,
+          objectFit: getCssObjectFit(object.fit),
           transform: `rotate(${object.rotation}deg)`,
           zIndex: object.zIndex,
         }}
@@ -232,7 +236,7 @@ function renderViewerObject(object: PageObject) {
         <img
           src={object.thumbnailSrc}
           alt=""
-          style={{ width: "100%", height: "100%", objectFit: object.fit, opacity: 0.55 }}
+          style={{ width: "100%", height: "100%", objectFit: getCssObjectFit(object.fit), opacity: 0.55 }}
         />
       ) : null}
       <div
@@ -350,6 +354,7 @@ export function BookViewer({ document }: { document: BookDocument }) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const bookRef = useRef<FlipBookHandle | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCacheRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const activeAudioKeyRef = useRef<string | null>(null);
   const settleTimeoutRef = useRef<number | null>(null);
   const previousPageRef = useRef(0);
@@ -423,10 +428,19 @@ export function BookViewer({ document }: { document: BookDocument }) {
   const pageLayout = getBookPageLayout(document.pageSize, getEditorComparableViewportSize(stageSize));
   const { pageWidth, pageHeight, renderWidth: renderW, renderHeight: renderH, scale: safeScale } = pageLayout;
 
-  const spreads = getSpreadLayout(document.pages.length, false);
+  const spreads = useMemo(() => getSpreadLayout(document.pages.length, false), [document.pages.length]);
   const currentSpreadIndex = getSpreadIndexByPage(currentPage, spreads);
   const currentSpread = spreads[currentSpreadIndex] ?? [];
   const currentSpreadAudio = findSpreadAudioObject(document, currentSpread);
+  const preloadAudioObjects = useMemo(
+    () =>
+      [currentSpreadIndex - 1, currentSpreadIndex, currentSpreadIndex + 1]
+        .filter((index) => index >= 0 && index < spreads.length)
+        .map((spreadIndex) => findSpreadAudioObject(document, spreads[spreadIndex] ?? []))
+        .filter((audioObject): audioObject is NonNullable<typeof audioObject> => audioObject !== null),
+    [currentSpreadIndex, document, spreads],
+  );
+  const preloadAudioSignature = preloadAudioObjects.map((audioObject) => `${audioObject.id}:${audioObject.src}`).join("|");
   const viewerSignature = `${document.pages.length}:${renderW}:${renderH}`;
   const hasStage = stageSize.width > 0 && stageSize.height > 0 && document.pages.length > 0;
   const isReady = readySignature === viewerSignature;
@@ -458,32 +472,62 @@ export function BookViewer({ document }: { document: BookDocument }) {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const nextAudioKey = currentSpreadAudio ? `${currentSpreadAudio.id}:${currentSpreadAudio.src}` : null;
-    if (!currentSpreadAudio) {
-      audio.pause();
-      audio.removeAttribute("src");
-      audio.load();
-      activeAudioKeyRef.current = null;
-      return;
-    }
+    if (!currentSpreadAudio) return;
 
+    const nextAudioKey = `${currentSpreadAudio.id}:${currentSpreadAudio.src}`;
     if (activeAudioKeyRef.current === nextAudioKey) return;
 
+    const cachedAudio = audioCacheRef.current.get(nextAudioKey);
     audio.pause();
+    if (cachedAudio) {
+      audio.src = cachedAudio.src;
+    } else {
+      audio.src = currentSpreadAudio.src;
+    }
     audio.currentTime = 0;
-    audio.src = currentSpreadAudio.src;
     activeAudioKeyRef.current = nextAudioKey;
     void audio.play().catch(() => {});
   }, [currentSpreadAudio]);
 
   useEffect(() => {
+    const cache = audioCacheRef.current;
+    const desiredKeys = new Set(preloadAudioObjects.map((audioObject) => `${audioObject.id}:${audioObject.src}`));
+
+    for (const audioObject of preloadAudioObjects) {
+      const key = `${audioObject.id}:${audioObject.src}`;
+      if (cache.has(key)) continue;
+
+      const cachedAudio = new Audio(audioObject.src);
+      cachedAudio.preload = "auto";
+      cachedAudio.load();
+      cache.set(key, cachedAudio);
+    }
+
+    for (const [key, cachedAudio] of cache) {
+      if (desiredKeys.has(key)) continue;
+      cachedAudio.pause();
+      cachedAudio.removeAttribute("src");
+      cachedAudio.load();
+      cache.delete(key);
+    }
+  }, [preloadAudioObjects, preloadAudioSignature]);
+
+  useEffect(() => {
     const audio = audioRef.current;
+    const audioCache = audioCacheRef.current;
     return () => {
       if (!audio) return;
       audio.pause();
       audio.removeAttribute("src");
       audio.load();
       activeAudioKeyRef.current = null;
+
+      for (const cachedAudio of audioCache.values()) {
+        cachedAudio.pause();
+        cachedAudio.removeAttribute("src");
+        cachedAudio.load();
+      }
+      audioCache.clear();
     };
   }, []);
 
