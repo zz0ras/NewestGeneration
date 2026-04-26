@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   BookOpen,
   LayoutTemplate,
@@ -13,6 +13,7 @@ import {
   Undo,
 } from "lucide-react";
 import { useEditorStore } from "@/stores/editor-store";
+import { ExportDialog } from "@/components/shell/ExportDialog";
 
 function formatPersistenceLabel(input: {
   status: "idle" | "saving" | "saved" | "error";
@@ -46,6 +47,8 @@ export function AppShellTopbar() {
     deleteDocumentLocal,
     persistence,
   } = useEditorStore();
+
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
 
   const canUndo = history.past.length > 0;
   const canRedo = history.future.length > 0;
@@ -272,10 +275,13 @@ export function AppShellTopbar() {
             border: "1px solid rgba(196, 168, 130, 0.25)",
             color: "#c4a882",
           }}
+          onClick={() => setExportDialogOpen(true)}
         >
           <Save size={15} /> Export
         </button>
       </div>
+
+      <ExportDialog open={exportDialogOpen} onClose={() => setExportDialogOpen(false)} />
     </header>
   );
 }
