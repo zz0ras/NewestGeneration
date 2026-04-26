@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { findSpreadAudioObject } from "@/lib/book/spread-audio";
 import { useEditorStore } from "@/stores/editor-store";
 import type { BookDocument, PageObject } from "@/lib/book/types";
+import { BOOK_PAGE_STAGE_PADDING, getBookPageLayout, getEditorComparableViewportSize } from "@/components/shared/book-page-layout";
 
 interface FlipBookHandle {
   pageFlip: () => {
@@ -59,7 +60,6 @@ const FlipBookComponent = HTMLFlipBook as unknown as React.ForwardRefExoticCompo
   FlipBookProps & React.RefAttributes<FlipBookHandle>
 >;
 
-const VIEWER_SCALE_RATIO = 0.85;
 const FLIP_ANIMATION_MS = 800;
 const FLIP_VISUAL_SETTLE_MS = 140;
 
@@ -420,15 +420,8 @@ export function BookViewer({ document }: { document: BookDocument }) {
   );
 
   const isEmptyDocument = document.pages.length === 0;
-  const stageWidth = Math.max(stageSize.width, 1);
-  const stageHeight = Math.max(stageSize.height, 1);
-  const pageWidth = Math.max(document.pageSize.width, 1);
-  const pageHeight = Math.max(document.pageSize.height, 1);
-  const availablePerPage = stageWidth / 2;
-  const fitScale = Math.min(availablePerPage / pageWidth, stageHeight / pageHeight);
-  const safeScale = Number.isFinite(fitScale) && fitScale > 0 ? fitScale * VIEWER_SCALE_RATIO : 0.1;
-  const renderW = Math.max(1, Math.floor(pageWidth * safeScale));
-  const renderH = Math.max(1, Math.floor(pageHeight * safeScale));
+  const pageLayout = getBookPageLayout(document.pageSize, getEditorComparableViewportSize(stageSize));
+  const { pageWidth, pageHeight, renderWidth: renderW, renderHeight: renderH, scale: safeScale } = pageLayout;
 
   const spreads = getSpreadLayout(document.pages.length, false);
   const currentSpreadIndex = getSpreadIndexByPage(currentPage, spreads);
@@ -586,8 +579,8 @@ export function BookViewer({ document }: { document: BookDocument }) {
                   <ViewerPage
                     key={page.id}
                     page={page}
-                    pageW={document.pageSize.width}
-                    pageH={document.pageSize.height}
+                    pageW={pageWidth}
+                    pageH={pageHeight}
                     renderW={renderW}
                     renderH={renderH}
                     fitScale={safeScale}
@@ -631,7 +624,7 @@ const viewerStyles = `
 .viewer-shell {
   position: relative;
   width: 100%;
-  height: calc(100vh - 65px - 48px);
+  height: calc(100vh - 65px);
 }
 
 .viewer-stage {
@@ -641,7 +634,7 @@ const viewerStyles = `
   position: relative;
   width: 100%;
   height: 100%;
-  padding: 24px;
+  padding: ${BOOK_PAGE_STAGE_PADDING.vertical / 2}px ${BOOK_PAGE_STAGE_PADDING.horizontal / 2}px;
   overflow: hidden;
 }
 
@@ -810,10 +803,6 @@ const viewerStyles = `
   .viewer-section,
   .viewer-shell {
     height: calc(100vh - 65px);
-  }
-
-  .viewer-stage {
-    padding: 12px;
   }
 
   .viewer-nav--prev {

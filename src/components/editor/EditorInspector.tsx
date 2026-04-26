@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Type, Upload } from "lucide-react";
+import { Maximize2, Type, Upload } from "lucide-react";
 import { PRESET_FONT_ASSETS } from "@/lib/fonts/presets";
 import { createUploadedFontAsset } from "@/lib/fonts/upload";
 import type { PageObject, TextAlign, TextObject } from "@/lib/book/types";
@@ -97,6 +97,18 @@ export function EditorInspector({ onRequestClose }: EditorInspectorProps) {
   const handleTextChange = (updates: Partial<TextObject>) => {
     if (!selectedPage || !isTextObject(selectedObject)) return;
     updateTextObjectStyle(selectedPage.id, selectedObject.id, updates);
+  };
+
+  const handleAutoFitPage = () => {
+    if (!selectedPage || !isVisualMediaObject(selectedObject)) return;
+    updateObject(selectedPage.id, selectedObject.id, {
+      x: 0,
+      y: 0,
+      width: document.pageSize.width,
+      height: document.pageSize.height,
+      rotation: 0,
+      fit: "cover",
+    });
   };
 
   const handleFontUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -325,21 +337,31 @@ export function EditorInspector({ onRequestClose }: EditorInspectorProps) {
               <div className="mt-1 break-all text-xs text-latte/60">{selectedObject.src}</div>
             </div>
             {isVisualMediaObject(selectedObject) ? (
-              <div>
-                <FieldLabel>Render mode</FieldLabel>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["cover", "contain"] as const).map((fit) => (
-                    <button
-                      key={fit}
-                      type="button"
-                      onClick={() => selectedPage && updateObject(selectedPage.id, selectedObject.id, { fit })}
-                      className={`rounded-xl border px-3 py-2 text-sm transition ${selectedObject.fit === fit ? "border-[rgba(196,168,130,0.42)] bg-[rgba(196,168,130,0.18)] text-cream" : "border-[rgba(196,168,130,0.14)] bg-[rgba(250,245,239,0.04)] text-latte/80"}`}
-                    >
-                      {fit}
-                    </button>
-                  ))}
+              <>
+                <button
+                  type="button"
+                  onClick={handleAutoFitPage}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-[rgba(196,168,130,0.24)] bg-[rgba(196,168,130,0.14)] px-4 py-2.5 text-sm font-medium text-cream transition hover:border-[rgba(196,168,130,0.4)] hover:bg-[rgba(196,168,130,0.2)]"
+                >
+                  <Maximize2 size={16} />
+                  Auto fit trang
+                </button>
+                <div>
+                  <FieldLabel>Render mode</FieldLabel>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(["cover", "contain"] as const).map((fit) => (
+                      <button
+                        key={fit}
+                        type="button"
+                        onClick={() => selectedPage && updateObject(selectedPage.id, selectedObject.id, { fit })}
+                        className={`rounded-xl border px-3 py-2 text-sm transition ${selectedObject.fit === fit ? "border-[rgba(196,168,130,0.42)] bg-[rgba(196,168,130,0.18)] text-cream" : "border-[rgba(196,168,130,0.14)] bg-[rgba(250,245,239,0.04)] text-latte/80"}`}
+                      >
+                        {fit}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </>
             ) : null}
           </Section>
         ) : null}

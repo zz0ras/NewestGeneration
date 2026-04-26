@@ -6,6 +6,7 @@ import type Konva from "konva";
 import useImage from "use-image";
 import type { AudioObject, BookPage, ImageObject, PageObject, ShapeObject, TextObject, VideoObject } from "@/lib/book/types";
 import { useEditorStore, useSelectedObject, useSelectedPage } from "@/stores/editor-store";
+import { getBookPageLayout } from "@/components/shared/book-page-layout";
 
 interface ObjectNodeProps {
   object: PageObject;
@@ -350,6 +351,8 @@ export function BookCanvas() {
   const [editingOverlayStyle, setEditingOverlayStyle] = useState<React.CSSProperties | null>(null);
 
   const editingTextObject = selectedObject?.type === "text" && selectedObject.id === editingTextObjectId ? selectedObject : null;
+  const pageLayout = getBookPageLayout(document.pageSize, dimensions);
+  const { pageWidth: docW, pageHeight: docH, scale } = pageLayout;
 
   const updateDimensions = useCallback(() => {
     if (!containerRef.current) return;
@@ -396,13 +399,14 @@ export function BookCanvas() {
       const pageRect = pageElement.getBoundingClientRect();
 
       setEditingOverlayStyle({
-        left: pageRect.left - containerRect.left + editingTextObject.x,
-        top: pageRect.top - containerRect.top + editingTextObject.y,
-        width: editingTextObject.width,
-        height: editingTextObject.height,
+        left: pageRect.left - containerRect.left + editingTextObject.x * scale,
+        top: pageRect.top - containerRect.top + editingTextObject.y * scale,
+        width: editingTextObject.width * scale,
+        height: editingTextObject.height * scale,
         transform: `rotate(${editingTextObject.rotation}deg)`,
+        transformOrigin: "top left",
         fontFamily: editingTextObject.fontFamily,
-        fontSize: `${editingTextObject.fontSize}px`,
+        fontSize: `${editingTextObject.fontSize * scale}px`,
         color: editingTextObject.fill,
         fontWeight: editingTextObject.fontWeight,
         fontStyle: editingTextObject.fontStyle,
@@ -412,7 +416,7 @@ export function BookCanvas() {
     });
 
     return () => window.cancelAnimationFrame(frameId);
-  }, [dimensions, editingTextObject, selectedPage]);
+  }, [dimensions, editingTextObject, scale, selectedPage]);
 
   const handleStartTextEdit = useCallback(
     (pageId: string, textObject: TextObject) => {
@@ -431,14 +435,6 @@ export function BookCanvas() {
         </div>
       </div>
     );
-  }
-
-  const { width: docW, height: docH } = document.pageSize;
-  const totalSpreadW = docW * 2;
-
-  let scale = 1;
-  if (dimensions.width > 0 && dimensions.height > 0) {
-    scale = Math.min((dimensions.width - 120) / totalSpreadW, (dimensions.height - 80) / docH, 1);
   }
 
   const selectedPageIndex = document.pages.findIndex((page) => page.id === selectedPageId);

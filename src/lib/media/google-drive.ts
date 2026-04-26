@@ -71,7 +71,8 @@ export async function fetchGoogleDriveFolderAssets(folderId: string): Promise<Me
     );
   }
 
-  const url = new URL(endpoint);
+  const baseUrl = typeof window === "undefined" ? "http://localhost:3000" : window.location.origin;
+  const url = new URL(endpoint, baseUrl);
   url.searchParams.set("folderId", folderId);
 
   const response = await fetch(url.toString(), {
@@ -82,7 +83,9 @@ export async function fetchGoogleDriveFolderAssets(folderId: string): Promise<Me
   });
 
   if (!response.ok) {
-    throw new Error(`Media API request failed with status ${response.status}`);
+    const payload = (await response.json().catch(() => null)) as { error?: unknown } | null;
+    const detail = typeof payload?.error === "string" ? payload.error : `Media API request failed with status ${response.status}`;
+    throw new Error(detail);
   }
 
   const payload = (await response.json()) as unknown;
